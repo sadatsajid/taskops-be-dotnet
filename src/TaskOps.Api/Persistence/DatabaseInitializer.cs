@@ -22,7 +22,7 @@ public static class DatabaseInitializer
             await dbContext.Database.MigrateAsync();
         }
 
-        if (environment.IsDevelopment() && databaseOptions.SeedDevelopmentData)
+        if ((environment.IsDevelopment() || environment.IsEnvironment("Testing")) && databaseOptions.SeedDevelopmentData)
         {
             await SeedDevelopmentDataAsync(dbContext);
         }

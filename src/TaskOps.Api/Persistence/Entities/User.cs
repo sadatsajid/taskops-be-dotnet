@@ -13,4 +13,6 @@ public sealed class User : AuditableEntity
     public string? PasswordHash { get; set; }
 
     public ICollection<OrganizationMember> OrganizationMemberships { get; set; } = [];
+
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = [];
 }

@@ -16,7 +16,9 @@
 
 ```text
 src/
-  TaskOps.Api/          # Web API, persistence, infrastructure
+  TaskOps.Api/          # Web API, features, persistence, infrastructure
+tests/
+  TaskOps.Api.Tests/    # PostgreSQL-backed integration tests
 docs/                   # Setup and phase notes (e.g. phase-0-setup.md)
 docker-compose.yml      # PostgreSQL for local development
 TaskOps_Project_Roadmap.md   # Goals, architecture evolution, backlog
@@ -59,6 +61,11 @@ The app uses `Properties/launchSettings.json` (e.g. **http://localhost:5000** fo
 | `GET /` | Service welcome payload |
 | `GET /api/status` | Environment and time (JSON envelope) |
 | `GET /health` | Health checks (includes PostgreSQL when configured) |
+| `POST /api/auth/register` | Register a user and issue access/refresh tokens |
+| `POST /api/auth/login` | Login with email/password |
+| `POST /api/auth/refresh` | Rotate a refresh token |
+| `POST /api/auth/logout` | Revoke a refresh token |
+| `GET /api/auth/me` | Return the authenticated user |
 
 In Development, OpenAPI is available under `/openapi/v1.json` and Swagger UI is mapped by the project’s OpenAPI UI wiring.
 
@@ -67,19 +74,40 @@ In Development, OpenAPI is available under `/openapi/v1.json` and Swagger UI is 
 Development settings enable applying EF Core migrations and optional seeding on startup (`appsettings.Development.json` → `Database` section). To add migrations from the repo root:
 
 ```bash
-dotnet ef migrations add <Name> --project src/TaskOps.Api/TaskOps.Api.csproj
+dotnet tool run dotnet-ef migrations add <Name> \
+  --project src/TaskOps.Api/TaskOps.Api.csproj \
+  --startup-project src/TaskOps.Api/TaskOps.Api.csproj \
+  --output-dir Persistence/Migrations
+```
+
+## Tests
+
+Integration tests use Testcontainers with real PostgreSQL:
+
+```bash
+dotnet test tests/TaskOps.Api.Tests/TaskOps.Api.Tests.csproj
+```
+
+Docker Desktop must be running.
+
+Build the whole solution with single-node MSBuild execution:
+
+```bash
+dotnet build TaskOps.slnx -m:1
 ```
 
 ## Configuration
 
 - **Base:** `src/TaskOps.Api/appsettings.json` — connection string placeholder and default flags.
 - **Development:** `src/TaskOps.Api/appsettings.Development.json` — local PostgreSQL connection string and startup behavior.
+- **JWT:** configure `Jwt:SigningKey` with at least 32 characters. Development uses a local-only key.
 
 Override secrets and environment-specific values with environment variables or user secrets in real deployments; do not commit production credentials.
 
 ## Documentation
 
 - [Phase 0 setup](docs/phase-0-setup.md) — local toolchain notes.
+- [Architecture notes](docs/architecture-notes.md) — current project structure and rules.
 - [Project roadmap](TaskOps_Project_Roadmap.md) — vision, stack, and evolution plan.
 
 ## Contributing
