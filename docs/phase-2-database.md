@@ -40,6 +40,20 @@ http://localhost:5000/api/status
 
 The health endpoint includes a PostgreSQL check.
 
+## Auth Endpoints Added After Phase 2
+
+The current API also includes the Phase 3 auth slice:
+
+```text
+POST /api/auth/register
+POST /api/auth/login
+POST /api/auth/refresh
+POST /api/auth/logout
+GET  /api/auth/me
+```
+
+Refresh tokens are stored hashed in PostgreSQL.
+
 ## Connection String
 
 Development connection string:
@@ -76,6 +90,11 @@ dotnet tool run dotnet-ef database update \
   --project src/TaskOps.Api/TaskOps.Api.csproj \
   --startup-project src/TaskOps.Api/TaskOps.Api.csproj
 ```
+
+Current migrations:
+
+- `20260520083630_InitialCreate`
+- `20260520100819_AddRefreshTokens`
 
 ## Inspect Seed Data
 

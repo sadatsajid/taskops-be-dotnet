@@ -1,0 +1,99 @@
+using FluentAssertions;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using TaskOps.Api.Features.Auth;
+using TaskOps.Api.Tests.Infrastructure;
+
+namespace TaskOps.Api.Tests;
+
+public sealed class AuthEndpointsTests(TaskOpsApiFactory factory) : IClassFixture<TaskOpsApiFactory>
+{
+    private readonly HttpClient _client = factory.CreateClient();
+
+    [Fact]
+    public async Task Register_CreatesUserAndReturnsTokens()
+    {
+        var email = $"register-{Guid.NewGuid():N}@example.com";
+
+        var response = await _client.PostAsJsonAsync("/api/auth/register", new RegisterRequest(
+            email,
+            "Register Test",
+            "Password123!"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var envelope = await response.Content.ReadFromJsonAsync<ApiResponseEnvelope<AuthResponse>>();
+        envelope.Should().NotBeNull();
+        envelope!.Success.Should().BeTrue();
+        envelope.Data.AccessToken.Should().NotBeNullOrWhiteSpace();
+        envelope.Data.RefreshToken.Should().NotBeNullOrWhiteSpace();
+        envelope.Data.CurrentUser.Email.Should().Be(email);
+    }
+
+    [Fact]
+    public async Task LoginAndMe_ReturnAuthenticatedUser()
+    {
+        var email = $"login-{Guid.NewGuid():N}@example.com";
+        await RegisterAsync(email);
+
+        var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, "Password123!"));
+
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var loginEnvelope = await loginResponse.Content.ReadFromJsonAsync<ApiResponseEnvelope<AuthResponse>>();
+
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            loginEnvelope!.Data.AccessToken);
+
+        var meResponse = await _client.GetFromJsonAsync<ApiResponseEnvelope<CurrentUserResponse>>("/api/auth/me");
+
+        meResponse.Should().NotBeNull();
+        meResponse!.Data.Email.Should().Be(email);
+    }
+
+    [Fact]
+    public async Task Refresh_RotatesRefreshToken()
+    {
+        var email = $"refresh-{Guid.NewGuid():N}@example.com";
+        var registered = await RegisterAsync(email);
+
+        var refreshResponse = await _client.PostAsJsonAsync("/api/auth/refresh", new RefreshTokenRequest(registered.RefreshToken));
+
+        refreshResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var refreshed = await refreshResponse.Content.ReadFromJsonAsync<ApiResponseEnvelope<AuthResponse>>();
+        refreshed!.Data.RefreshToken.Should().NotBe(registered.RefreshToken);
+
+        var oldRefreshResponse = await _client.PostAsJsonAsync("/api/auth/refresh", new RefreshTokenRequest(registered.RefreshToken));
+        oldRefreshResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Logout_RevokesRefreshToken()
+    {
+        var email = $"logout-{Guid.NewGuid():N}@example.com";
+        var registered = await RegisterAsync(email);
+
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            registered.AccessToken);
+
+        var logoutResponse = await _client.PostAsJsonAsync("/api/auth/logout", new LogoutRequest(registered.RefreshToken));
+        logoutResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var refreshResponse = await _client.PostAsJsonAsync("/api/auth/refresh", new RefreshTokenRequest(registered.RefreshToken));
+        refreshResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    private async Task<AuthResponse> RegisterAsync(string email)
+    {
+        var response = await _client.PostAsJsonAsync("/api/auth/register", new RegisterRequest(
+            email,
+            "Auth Test",
+            "Password123!"));
+
+        response.EnsureSuccessStatusCode();
+        var envelope = await response.Content.ReadFromJsonAsync<ApiResponseEnvelope<AuthResponse>>();
+        return envelope!.Data;
+    }
+}
