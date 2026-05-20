@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: taskops-postgres
+    environment:
+      POSTGRES_DB: taskops
+      POSTGRES_USER: taskops
+      POSTGRES_PASSWORD: taskops_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - taskops-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taskops -d taskops"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  taskops-postgres-data:

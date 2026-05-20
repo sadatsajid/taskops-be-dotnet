@@ -1,0 +1,14 @@
+bin/
+obj/
+.dotnet-cli/
+.vs/
+.vscode/
+.idea/
+
+*.user
+*.suo
+*.swp
+*.tmp
+
+TestResults/
+coverage/
