@@ -1,6 +1,5 @@
 using FluentAssertions;
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using TaskOps.Api.Features.Auth;
 using TaskOps.Api.Tests.Infrastructure;
@@ -35,16 +34,14 @@ public sealed class AuthEndpointsTests(TaskOpsApiFactory factory) : IClassFixtur
     public async Task LoginAndMe_ReturnAuthenticatedUser()
     {
         var email = $"login-{Guid.NewGuid():N}@example.com";
-        await RegisterAsync(email);
+        await _client.RegisterAsync(email, "Auth Test");
 
         var loginResponse = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, "Password123!"));
 
         loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         var loginEnvelope = await loginResponse.Content.ReadFromJsonAsync<ApiResponseEnvelope<AuthResponse>>();
 
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Bearer",
-            loginEnvelope!.Data.AccessToken);
+        _client.Authorize(loginEnvelope!.Data);
 
         var meResponse = await _client.GetFromJsonAsync<ApiResponseEnvelope<CurrentUserResponse>>("/api/auth/me");
 
@@ -56,7 +53,7 @@ public sealed class AuthEndpointsTests(TaskOpsApiFactory factory) : IClassFixtur
     public async Task Refresh_RotatesRefreshToken()
     {
         var email = $"refresh-{Guid.NewGuid():N}@example.com";
-        var registered = await RegisterAsync(email);
+        var registered = await _client.RegisterAsync(email, "Auth Test");
 
         var refreshResponse = await _client.PostAsJsonAsync("/api/auth/refresh", new RefreshTokenRequest(registered.RefreshToken));
 
@@ -72,7 +69,7 @@ public sealed class AuthEndpointsTests(TaskOpsApiFactory factory) : IClassFixtur
     public async Task Refresh_AllowsOnlyOneConcurrentRotation()
     {
         var email = $"refresh-concurrent-{Guid.NewGuid():N}@example.com";
-        var registered = await RegisterAsync(email);
+        var registered = await _client.RegisterAsync(email, "Auth Test");
 
         var refreshRequests = Enumerable.Range(0, 2)
             .Select(_ => _client.PostAsJsonAsync("/api/auth/refresh", new RefreshTokenRequest(registered.RefreshToken)))
@@ -88,11 +85,9 @@ public sealed class AuthEndpointsTests(TaskOpsApiFactory factory) : IClassFixtur
     public async Task Logout_RevokesRefreshToken()
     {
         var email = $"logout-{Guid.NewGuid():N}@example.com";
-        var registered = await RegisterAsync(email);
+        var registered = await _client.RegisterAsync(email, "Auth Test");
 
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Bearer",
-            registered.AccessToken);
+        _client.Authorize(registered);
 
         var logoutResponse = await _client.PostAsJsonAsync("/api/auth/logout", new LogoutRequest(registered.RefreshToken));
         logoutResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
@@ -105,7 +100,7 @@ public sealed class AuthEndpointsTests(TaskOpsApiFactory factory) : IClassFixtur
     public async Task Register_DuplicateEmail_ReturnsConflictProblemDetails()
     {
         var email = $"duplicate-{Guid.NewGuid():N}@example.com";
-        await RegisterAsync(email);
+        await _client.RegisterAsync(email, "Auth Test");
 
         var response = await _client.PostAsJsonAsync("/api/auth/register", new RegisterRequest(
             email.ToUpperInvariant(),
@@ -122,7 +117,7 @@ public sealed class AuthEndpointsTests(TaskOpsApiFactory factory) : IClassFixtur
     public async Task Login_WithWrongShortPassword_ReturnsUnauthorized()
     {
         var email = $"short-wrong-password-{Guid.NewGuid():N}@example.com";
-        await RegisterAsync(email);
+        await _client.RegisterAsync(email, "Auth Test");
 
         var response = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, "wrong"));
 
@@ -146,15 +141,4 @@ public sealed class AuthEndpointsTests(TaskOpsApiFactory factory) : IClassFixtur
         json.Should().Contain("displayName");
     }
 
-    private async Task<AuthResponse> RegisterAsync(string email)
-    {
-        var response = await _client.PostAsJsonAsync("/api/auth/register", new RegisterRequest(
-            email,
-            "Auth Test",
-            "Password123!"));
-
-        response.EnsureSuccessStatusCode();
-        var envelope = await response.Content.ReadFromJsonAsync<ApiResponseEnvelope<AuthResponse>>();
-        return envelope!.Data;
-    }
 }
