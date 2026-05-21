@@ -38,11 +38,12 @@ public static class OrganizationEndpoints
     }
 
     private static async Task<IResult> ListOrganizationsAsync(
+        [AsParameters] PageRequest page,
         IOrganizationService organizationService,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
-        var result = await organizationService.ListOrganizationsAsync(cancellationToken);
+        var result = await organizationService.ListOrganizationsAsync(page, cancellationToken);
         return ToOkResult(result, httpContext);
     }
 
@@ -82,11 +83,12 @@ public static class OrganizationEndpoints
 
     private static async Task<IResult> ListMembersAsync(
         Guid organizationId,
+        [AsParameters] PageRequest page,
         IOrganizationService organizationService,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
-        var result = await organizationService.ListMembersAsync(organizationId, cancellationToken);
+        var result = await organizationService.ListMembersAsync(organizationId, page, cancellationToken);
         return ToOkResult(result, httpContext);
     }
 

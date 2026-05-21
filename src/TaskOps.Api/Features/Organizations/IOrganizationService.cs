@@ -2,7 +2,8 @@ namespace TaskOps.Api.Features.Organizations;
 
 public interface IOrganizationService
 {
-    Task<OrganizationServiceResult<IReadOnlyList<OrganizationListItemResponse>>> ListOrganizationsAsync(
+    Task<OrganizationServiceResult<PagedResponse<OrganizationListItemResponse>>> ListOrganizationsAsync(
+        PageRequest page,
         CancellationToken cancellationToken);
 
     Task<OrganizationServiceResult<OrganizationResponse>> CreateOrganizationAsync(
@@ -18,8 +19,9 @@ public interface IOrganizationService
         UpdateOrganizationRequest request,
         CancellationToken cancellationToken);
 
-    Task<OrganizationServiceResult<IReadOnlyList<OrganizationMemberResponse>>> ListMembersAsync(
+    Task<OrganizationServiceResult<PagedResponse<OrganizationMemberResponse>>> ListMembersAsync(
         Guid organizationId,
+        PageRequest page,
         CancellationToken cancellationToken);
 
     Task<OrganizationServiceResult<OrganizationMemberResponse>> AddMemberAsync(
