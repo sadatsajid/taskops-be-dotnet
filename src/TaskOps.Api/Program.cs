@@ -1,6 +1,4 @@
-using TaskOps.Api.Features.Auth;
-using TaskOps.Api.Features.Organizations;
-using TaskOps.Api.Features.System;
+using TaskOps.Api.Features;
 using TaskOps.Api.Infrastructure;
 using TaskOps.Api.Persistence;
 
@@ -17,9 +15,7 @@ await app.Services.InitializeDatabaseAsync(app.Environment);
 
 app.UseTaskOpsApi();
 
-app.MapSystemEndpoints();
-app.MapAuthEndpoints();
-app.MapOrganizationEndpoints();
+app.MapTaskOpsEndpoints();
 
 app.Run();
 

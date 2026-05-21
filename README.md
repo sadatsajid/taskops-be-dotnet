@@ -78,6 +78,11 @@ The app uses `Properties/launchSettings.json` (e.g. **http://localhost:5000** fo
 | `POST /api/organizations/{organizationId}/members` | Add an organization member as owner |
 | `PUT /api/organizations/{organizationId}/members/{memberId}/role` | Change a member role as owner |
 | `DELETE /api/organizations/{organizationId}/members/{memberId}` | Remove a member as owner |
+| `GET /api/organizations/{organizationId}/projects` | List non-archived projects for an organization |
+| `POST /api/organizations/{organizationId}/projects` | Create a project as owner, admin, or project manager |
+| `GET /api/organizations/{organizationId}/projects/{projectId}` | Get project details scoped by organization membership |
+| `PUT /api/organizations/{organizationId}/projects/{projectId}` | Update a project as owner, admin, or project manager |
+| `POST /api/organizations/{organizationId}/projects/{projectId}/archive` | Archive a project |
 
 In Development, OpenAPI is available under `/openapi/v1.json` and Swagger UI is mapped by the project’s OpenAPI UI wiring.
 

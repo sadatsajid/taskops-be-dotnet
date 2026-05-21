@@ -7,6 +7,8 @@ TaskOps is intentionally still one ASP.NET Core API project. The structure now f
 ```text
 Features/
   Auth/
+  Organizations/
+  Projects/
   System/
 Infrastructure/
 Persistence/
@@ -20,7 +22,8 @@ Shared/
 - EF Core is used directly through `TaskOpsDbContext`.
 - Do not expose EF entities as API responses.
 - Organization access must be scoped through membership checks, not global roles.
-- Keep startup code in `Program.cs` small; use extension methods for service registration and middleware.
+- Keep startup code in `Program.cs` small; compose feature endpoint mapping through `MapTaskOpsEndpoints()`.
+- Keep infrastructure registration focused on platform wiring; compose feature services through `AddTaskOpsFeatures()`.
 
 ## Auth Decisions
 
