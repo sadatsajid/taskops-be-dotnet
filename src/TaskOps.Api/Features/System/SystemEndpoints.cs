@@ -17,12 +17,12 @@ public static class SystemEndpoints
             .WithName("Root")
             .WithTags("System");
 
-        endpoints.MapGet("/api/status", (IHostEnvironment environment, HttpContext httpContext) =>
+        endpoints.MapGet("/api/status", (IHostEnvironment environment, TimeProvider timeProvider, HttpContext httpContext) =>
             Results.Ok(ApiResponse.Success(new
             {
                 service = "TaskOps.Api",
                 environment = environment.EnvironmentName,
-                utcNow = DateTimeOffset.UtcNow
+                utcNow = timeProvider.GetUtcNow()
             }, httpContext.TraceIdentifier)))
             .WithName("GetApiStatus")
             .WithTags("System");

@@ -12,7 +12,7 @@ builder.Services
 
 var app = builder.Build();
 
-await app.Services.InitializeDatabaseAsync(app.Configuration, app.Environment);
+await app.Services.InitializeDatabaseAsync(app.Environment);
 
 app.UseTaskOpsApi();
 

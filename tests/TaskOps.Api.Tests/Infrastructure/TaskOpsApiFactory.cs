@@ -1,10 +1,6 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using TaskOps.Api.Persistence;
 using Testcontainers.PostgreSql;
 
 namespace TaskOps.Api.Tests.Infrastructure;
@@ -45,14 +41,6 @@ public sealed class TaskOpsApiFactory : WebApplicationFactory<Program>, IAsyncLi
             };
 
             configurationBuilder.AddInMemoryCollection(overrides);
-        });
-        builder.ConfigureServices(services =>
-        {
-            services.RemoveAll<DbContextOptions<TaskOpsDbContext>>();
-            services.AddDbContext<TaskOpsDbContext>(options =>
-            {
-                options.UseNpgsql(_postgres.GetConnectionString());
-            });
         });
     }
 }
