@@ -98,7 +98,10 @@ public static class AuthEndpoints
         return result.Failure switch
         {
             AuthFailure.Validation => Results.ValidationProblem(result.Errors?.ToDictionary() ?? []),
-            AuthFailure.DuplicateEmail => Results.Conflict(new { message = "A user with this email already exists." }),
+            AuthFailure.DuplicateEmail => Results.Problem(
+                title: "Duplicate email.",
+                detail: "A user with this email already exists.",
+                statusCode: StatusCodes.Status409Conflict),
             AuthFailure.InvalidCredentials => Results.Problem(
                 title: "Invalid credentials.",
                 statusCode: StatusCodes.Status401Unauthorized),

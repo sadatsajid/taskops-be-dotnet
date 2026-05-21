@@ -69,6 +69,22 @@ public sealed class AuthEndpointsTests(TaskOpsApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task Refresh_AllowsOnlyOneConcurrentRotation()
+    {
+        var email = $"refresh-concurrent-{Guid.NewGuid():N}@example.com";
+        var registered = await RegisterAsync(email);
+
+        var refreshRequests = Enumerable.Range(0, 2)
+            .Select(_ => _client.PostAsJsonAsync("/api/auth/refresh", new RefreshTokenRequest(registered.RefreshToken)))
+            .ToArray();
+
+        var responses = await Task.WhenAll(refreshRequests);
+
+        responses.Count(response => response.StatusCode == HttpStatusCode.OK).Should().Be(1);
+        responses.Count(response => response.StatusCode == HttpStatusCode.Unauthorized).Should().Be(1);
+    }
+
+    [Fact]
     public async Task Logout_RevokesRefreshToken()
     {
         var email = $"logout-{Guid.NewGuid():N}@example.com";
@@ -83,6 +99,51 @@ public sealed class AuthEndpointsTests(TaskOpsApiFactory factory) : IClassFixtur
 
         var refreshResponse = await _client.PostAsJsonAsync("/api/auth/refresh", new RefreshTokenRequest(registered.RefreshToken));
         refreshResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Register_DuplicateEmail_ReturnsConflictProblemDetails()
+    {
+        var email = $"duplicate-{Guid.NewGuid():N}@example.com";
+        await RegisterAsync(email);
+
+        var response = await _client.PostAsJsonAsync("/api/auth/register", new RegisterRequest(
+            email.ToUpperInvariant(),
+            "Duplicate Test",
+            "Password123!"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var json = await response.Content.ReadAsStringAsync();
+        json.Should().Contain("\"title\":\"Duplicate email.\"");
+        json.Should().Contain("\"detail\":\"A user with this email already exists.\"");
+    }
+
+    [Fact]
+    public async Task Login_WithWrongShortPassword_ReturnsUnauthorized()
+    {
+        var email = $"short-wrong-password-{Guid.NewGuid():N}@example.com";
+        await RegisterAsync(email);
+
+        var response = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest(email, "wrong"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Register_WithOversizedFields_ReturnsValidationProblem()
+    {
+        var oversizedEmail = $"{new string('a', 321)}@example.com";
+        var oversizedDisplayName = new string('b', 121);
+
+        var response = await _client.PostAsJsonAsync("/api/auth/register", new RegisterRequest(
+            oversizedEmail,
+            oversizedDisplayName,
+            "Password123!"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var json = await response.Content.ReadAsStringAsync();
+        json.Should().Contain("email");
+        json.Should().Contain("displayName");
     }
 
     private async Task<AuthResponse> RegisterAsync(string email)

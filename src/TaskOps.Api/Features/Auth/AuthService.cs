@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using TaskOps.Api.Persistence;
 using TaskOps.Api.Persistence.Entities;
 using TaskOps.Api.Shared.Security;
@@ -14,6 +15,9 @@ public sealed class AuthService(
     TimeProvider timeProvider) : IAuthService
 {
     private static readonly object Empty = new();
+    private const int MaxEmailLength = 320;
+    private const int MaxDisplayNameLength = 120;
+    private const int MinPasswordLength = 8;
 
     public async Task<AuthServiceResult<AuthResponse>> RegisterAsync(
         RegisterRequest request,
@@ -44,7 +48,15 @@ public sealed class AuthService(
 
         dbContext.Users.Add(user);
         var response = CreateTokenPair(user);
-        await dbContext.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (IsUniqueViolation(exception, "IX_Users_NormalizedEmail"))
+        {
+            return AuthServiceResult<AuthResponse>.Failed(AuthFailure.DuplicateEmail);
+        }
 
         return AuthServiceResult<AuthResponse>.Success(response);
     }
@@ -88,25 +100,42 @@ public sealed class AuthService(
         }
 
         var refreshTokenHash = tokenService.HashRefreshToken(request.RefreshToken);
+        var now = timeProvider.GetUtcNow();
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
         var existingRefreshToken = await dbContext.RefreshTokens
+            .AsNoTracking()
             .Include(refreshToken => refreshToken.User)
             .FirstOrDefaultAsync(refreshToken => refreshToken.TokenHash == refreshTokenHash, cancellationToken);
 
         if (existingRefreshToken is null ||
             existingRefreshToken.RevokedAt is not null ||
-            existingRefreshToken.ExpiresAt <= timeProvider.GetUtcNow())
+            existingRefreshToken.ExpiresAt <= now)
         {
             return AuthServiceResult<AuthResponse>.Failed(AuthFailure.Unauthorized);
         }
 
         var newRefreshToken = tokenService.CreateRefreshToken();
-        existingRefreshToken.RevokedAt = timeProvider.GetUtcNow();
-        existingRefreshToken.ReplacedByTokenHash = newRefreshToken.TokenHash;
+        var revokedCount = await dbContext.RefreshTokens
+            .Where(refreshToken =>
+                refreshToken.Id == existingRefreshToken.Id &&
+                refreshToken.RevokedAt == null &&
+                refreshToken.ExpiresAt > now)
+            .ExecuteUpdateAsync(updates => updates
+                .SetProperty(refreshToken => refreshToken.RevokedAt, now)
+                .SetProperty(refreshToken => refreshToken.ReplacedByTokenHash, newRefreshToken.TokenHash), cancellationToken);
+
+        if (revokedCount != 1)
+        {
+            return AuthServiceResult<AuthResponse>.Failed(AuthFailure.Unauthorized);
+        }
 
         AddRefreshToken(existingRefreshToken.UserId, newRefreshToken);
 
         var accessToken = tokenService.CreateAccessToken(existingRefreshToken.User);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return AuthServiceResult<AuthResponse>.Success(ToAuthResponse(existingRefreshToken.User, accessToken, newRefreshToken));
     }
@@ -190,28 +219,40 @@ public sealed class AuthService(
 
     private static Dictionary<string, string[]> ValidateRegistration(RegisterRequest request)
     {
-        var errors = ValidateLogin(new LoginRequest(request.Email, request.Password));
+        var errors = ValidateLoginShape(request.Email, request.Password);
 
-        if (string.IsNullOrWhiteSpace(request.DisplayName))
+        if (!string.IsNullOrWhiteSpace(request.Password) && request.Password.Length < MinPasswordLength)
         {
-            errors["displayName"] = ["Display name is required."];
+            errors["password"] = [$"Password must be at least {MinPasswordLength} characters."];
+        }
+
+        var displayName = request.DisplayName?.Trim() ?? string.Empty;
+        if (displayName.Length == 0 || displayName.Length > MaxDisplayNameLength)
+        {
+            errors["displayName"] = [$"Display name must be between 1 and {MaxDisplayNameLength} characters."];
         }
 
         return errors;
     }
 
-    private static Dictionary<string, string[]> ValidateLogin(LoginRequest request)
+    private static Dictionary<string, string[]> ValidateLogin(LoginRequest request) =>
+        ValidateLoginShape(request.Email, request.Password);
+
+    private static Dictionary<string, string[]> ValidateLoginShape(string? email, string? password)
     {
         var errors = new Dictionary<string, string[]>();
+        var trimmedEmail = email?.Trim() ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains('@', StringComparison.Ordinal))
+        if (trimmedEmail.Length == 0 ||
+            trimmedEmail.Length > MaxEmailLength ||
+            !trimmedEmail.Contains('@', StringComparison.Ordinal))
         {
-            errors["email"] = ["A valid email is required."];
+            errors["email"] = [$"A valid email up to {MaxEmailLength} characters is required."];
         }
 
-        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
+        if (string.IsNullOrWhiteSpace(password))
         {
-            errors["password"] = ["Password must be at least 8 characters."];
+            errors["password"] = ["Password is required."];
         }
 
         return errors;
@@ -223,4 +264,11 @@ public sealed class AuthService(
     };
 
     private static string NormalizeEmail(string email) => email.Trim().ToUpperInvariant();
+
+    private static bool IsUniqueViolation(DbUpdateException exception, string constraintName) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: var actualConstraintName
+        } && actualConstraintName == constraintName;
 }
