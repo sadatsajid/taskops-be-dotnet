@@ -4,7 +4,10 @@ namespace TaskOps.Api.Shared.Security;
 
 public interface IOrganizationAccessService
 {
-    Task<OrganizationMember?> GetMembershipAsync(Guid organizationId, CancellationToken cancellationToken);
+    Task<OrganizationAccessResult> RequireMembershipAsync(Guid organizationId, CancellationToken cancellationToken);
 
-    Task<bool> HasAnyRoleAsync(Guid organizationId, OrganizationRole[] roles, CancellationToken cancellationToken);
+    Task<OrganizationAccessResult> RequireAnyRoleAsync(
+        Guid organizationId,
+        OrganizationRole[] roles,
+        CancellationToken cancellationToken);
 }

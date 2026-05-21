@@ -1,8 +1,8 @@
 using System.Data;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 using TaskOps.Api.Persistence;
 using TaskOps.Api.Persistence.Entities;
+using TaskOps.Api.Shared.Api;
 using TaskOps.Api.Shared.Security;
 
 namespace TaskOps.Api.Features.Organizations;
@@ -19,15 +19,14 @@ public sealed class OrganizationService(
     private static readonly string ValidRolesMessage = $"Role must be one of {string.Join(", ", RoleNames)}.";
     private const int MaxNameLength = 160;
     private const int MaxSlugLength = 100;
-    private const int MaxEmailLength = 320;
 
-    public async Task<OrganizationServiceResult<PagedResponse<OrganizationListItemResponse>>> ListOrganizationsAsync(
+    public async Task<ServiceResult<PagedResponse<OrganizationListItemResponse>, OrganizationFailure>> ListOrganizationsAsync(
         PageRequest page,
         CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not { } userId)
         {
-            return OrganizationServiceResult<PagedResponse<OrganizationListItemResponse>>.Failed(OrganizationFailure.Unauthorized);
+            return Failure<PagedResponse<OrganizationListItemResponse>>(OrganizationFailure.Unauthorized);
         }
 
         var limit = page.SafeLimit;
@@ -46,7 +45,7 @@ public sealed class OrganizationService(
                 OrganizationMemberResponse.FormatRole(member.Role)))
             .ToListAsync(cancellationToken);
 
-        return OrganizationServiceResult<PagedResponse<OrganizationListItemResponse>>.Success(
+        return Success(
             new PagedResponse<OrganizationListItemResponse>(
                 organizations.Take(limit).ToList(),
                 offset,
@@ -54,25 +53,25 @@ public sealed class OrganizationService(
                 organizations.Count > limit));
     }
 
-    public async Task<OrganizationServiceResult<OrganizationResponse>> CreateOrganizationAsync(
+    public async Task<ServiceResult<OrganizationResponse, OrganizationFailure>> CreateOrganizationAsync(
         CreateOrganizationRequest request,
         CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not { } userId)
         {
-            return OrganizationServiceResult<OrganizationResponse>.Failed(OrganizationFailure.Unauthorized);
+            return Failure<OrganizationResponse>(OrganizationFailure.Unauthorized);
         }
 
         var errors = ValidateOrganization(request.Name, request.Slug);
         if (errors.Count > 0)
         {
-            return OrganizationServiceResult<OrganizationResponse>.Validation(errors);
+            return Validation<OrganizationResponse>(errors);
         }
 
         var normalizedSlug = NormalizeSlug(request.Slug);
         if (await dbContext.Organizations.AnyAsync(organization => organization.Slug == normalizedSlug, cancellationToken))
         {
-            return OrganizationServiceResult<OrganizationResponse>.Failed(OrganizationFailure.DuplicateSlug);
+            return Failure<OrganizationResponse>(OrganizationFailure.DuplicateSlug);
         }
 
         var currentUserProfile = await dbContext.Users
@@ -82,7 +81,7 @@ public sealed class OrganizationService(
             .FirstOrDefaultAsync(cancellationToken);
         if (currentUserProfile is null)
         {
-            return OrganizationServiceResult<OrganizationResponse>.Failed(OrganizationFailure.NotFound);
+            return Failure<OrganizationResponse>(OrganizationFailure.NotFound);
         }
 
         var organization = new Organization
@@ -108,9 +107,9 @@ public sealed class OrganizationService(
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException exception) when (IsUniqueViolation(exception, "IX_Organizations_Slug"))
+        catch (DbUpdateException exception) when (PostgresErrors.IsUniqueViolation(exception, "IX_Organizations_Slug"))
         {
-            return OrganizationServiceResult<OrganizationResponse>.Failed(OrganizationFailure.DuplicateSlug);
+            return Failure<OrganizationResponse>(OrganizationFailure.DuplicateSlug);
         }
 
         var response = new OrganizationResponse(
@@ -125,16 +124,16 @@ public sealed class OrganizationService(
                 OrganizationMemberResponse.FormatRole(member.Role),
                 member.JoinedAt));
 
-        return OrganizationServiceResult<OrganizationResponse>.Success(response);
+        return Success(response);
     }
 
-    public async Task<OrganizationServiceResult<OrganizationResponse>> GetOrganizationAsync(
+    public async Task<ServiceResult<OrganizationResponse, OrganizationFailure>> GetOrganizationAsync(
         Guid organizationId,
         CancellationToken cancellationToken)
     {
         if (currentUser.UserId is not { } userId)
         {
-            return OrganizationServiceResult<OrganizationResponse>.Failed(OrganizationFailure.Unauthorized);
+            return Failure<OrganizationResponse>(OrganizationFailure.Unauthorized);
         }
 
         var response = await dbContext.OrganizationMembers
@@ -154,11 +153,11 @@ public sealed class OrganizationService(
             .FirstOrDefaultAsync(cancellationToken);
 
         return response is null
-            ? OrganizationServiceResult<OrganizationResponse>.Failed(OrganizationFailure.NotFound)
-            : OrganizationServiceResult<OrganizationResponse>.Success(response);
+            ? Failure<OrganizationResponse>(OrganizationFailure.NotFound)
+            : Success(response);
     }
 
-    public async Task<OrganizationServiceResult<OrganizationResponse>> UpdateOrganizationAsync(
+    public async Task<ServiceResult<OrganizationResponse, OrganizationFailure>> UpdateOrganizationAsync(
         Guid organizationId,
         UpdateOrganizationRequest request,
         CancellationToken cancellationToken)
@@ -166,13 +165,13 @@ public sealed class OrganizationService(
         var access = await RequireOwnerAsync(organizationId, cancellationToken);
         if (access != OrganizationFailure.None)
         {
-            return OrganizationServiceResult<OrganizationResponse>.Failed(access);
+            return Failure<OrganizationResponse>(access);
         }
 
         var errors = ValidateOrganization(request.Name, request.Slug);
         if (errors.Count > 0)
         {
-            return OrganizationServiceResult<OrganizationResponse>.Validation(errors);
+            return Validation<OrganizationResponse>(errors);
         }
 
         var organization = await dbContext.Organizations.FirstOrDefaultAsync(
@@ -180,7 +179,7 @@ public sealed class OrganizationService(
             cancellationToken);
         if (organization is null)
         {
-            return OrganizationServiceResult<OrganizationResponse>.Failed(OrganizationFailure.NotFound);
+            return Failure<OrganizationResponse>(OrganizationFailure.NotFound);
         }
 
         var normalizedSlug = NormalizeSlug(request.Slug);
@@ -189,7 +188,7 @@ public sealed class OrganizationService(
             cancellationToken);
         if (slugTaken)
         {
-            return OrganizationServiceResult<OrganizationResponse>.Failed(OrganizationFailure.DuplicateSlug);
+            return Failure<OrganizationResponse>(OrganizationFailure.DuplicateSlug);
         }
 
         organization.Name = request.Name.Trim();
@@ -199,25 +198,23 @@ public sealed class OrganizationService(
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException exception) when (IsUniqueViolation(exception, "IX_Organizations_Slug"))
+        catch (DbUpdateException exception) when (PostgresErrors.IsUniqueViolation(exception, "IX_Organizations_Slug"))
         {
-            return OrganizationServiceResult<OrganizationResponse>.Failed(OrganizationFailure.DuplicateSlug);
+            return Failure<OrganizationResponse>(OrganizationFailure.DuplicateSlug);
         }
 
         return await GetOrganizationAsync(organizationId, cancellationToken);
     }
 
-    public async Task<OrganizationServiceResult<PagedResponse<OrganizationMemberResponse>>> ListMembersAsync(
+    public async Task<ServiceResult<PagedResponse<OrganizationMemberResponse>, OrganizationFailure>> ListMembersAsync(
         Guid organizationId,
         PageRequest page,
         CancellationToken cancellationToken)
     {
-        var membership = await organizationAccess.GetMembershipAsync(organizationId, cancellationToken);
-        if (membership is null)
+        var access = await organizationAccess.RequireMembershipAsync(organizationId, cancellationToken);
+        if (!access.IsAllowed)
         {
-            return currentUser.IsAuthenticated
-                ? OrganizationServiceResult<PagedResponse<OrganizationMemberResponse>>.Failed(OrganizationFailure.NotFound)
-                : OrganizationServiceResult<PagedResponse<OrganizationMemberResponse>>.Failed(OrganizationFailure.Unauthorized);
+            return Failure<PagedResponse<OrganizationMemberResponse>>(ToOrganizationFailure(access.Status));
         }
 
         var limit = page.SafeLimit;
@@ -239,7 +236,7 @@ public sealed class OrganizationService(
                 member.JoinedAt))
             .ToListAsync(cancellationToken);
 
-        return OrganizationServiceResult<PagedResponse<OrganizationMemberResponse>>.Success(
+        return Success(
             new PagedResponse<OrganizationMemberResponse>(
                 members.Take(limit).ToList(),
                 offset,
@@ -247,7 +244,7 @@ public sealed class OrganizationService(
                 members.Count > limit));
     }
 
-    public async Task<OrganizationServiceResult<OrganizationMemberResponse>> AddMemberAsync(
+    public async Task<ServiceResult<OrganizationMemberResponse, OrganizationFailure>> AddMemberAsync(
         Guid organizationId,
         AddOrganizationMemberRequest request,
         CancellationToken cancellationToken)
@@ -255,10 +252,10 @@ public sealed class OrganizationService(
         var access = await RequireOwnerAsync(organizationId, cancellationToken);
         if (access != OrganizationFailure.None)
         {
-            return OrganizationServiceResult<OrganizationMemberResponse>.Failed(access);
+            return Failure<OrganizationMemberResponse>(access);
         }
 
-        var errors = ValidateEmail(request.Email);
+        var errors = EmailRules.Validate(request.Email);
         if (!TryParseRole(request.Role, out var role))
         {
             errors["role"] = [ValidRolesMessage];
@@ -266,10 +263,10 @@ public sealed class OrganizationService(
 
         if (errors.Count > 0)
         {
-            return OrganizationServiceResult<OrganizationMemberResponse>.Validation(errors);
+            return Validation<OrganizationMemberResponse>(errors);
         }
 
-        var normalizedEmail = NormalizeEmail(request.Email);
+        var normalizedEmail = EmailRules.Normalize(request.Email);
         var user = await dbContext.Users
             .AsNoTracking()
             .Where(user => user.NormalizedEmail == normalizedEmail)
@@ -277,7 +274,7 @@ public sealed class OrganizationService(
             .FirstOrDefaultAsync(cancellationToken);
         if (user is null)
         {
-            return OrganizationServiceResult<OrganizationMemberResponse>.Failed(OrganizationFailure.UserNotFound);
+            return Failure<OrganizationMemberResponse>(OrganizationFailure.UserNotFound);
         }
 
         var alreadyMember = await dbContext.OrganizationMembers.AnyAsync(
@@ -285,7 +282,7 @@ public sealed class OrganizationService(
             cancellationToken);
         if (alreadyMember)
         {
-            return OrganizationServiceResult<OrganizationMemberResponse>.Failed(OrganizationFailure.DuplicateMember);
+            return Failure<OrganizationMemberResponse>(OrganizationFailure.DuplicateMember);
         }
 
         var member = new OrganizationMember
@@ -303,12 +300,12 @@ public sealed class OrganizationService(
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException exception) when (IsUniqueViolation(exception, "IX_OrganizationMembers_OrganizationId_UserId"))
+        catch (DbUpdateException exception) when (PostgresErrors.IsUniqueViolation(exception, "IX_OrganizationMembers_OrganizationId_UserId"))
         {
-            return OrganizationServiceResult<OrganizationMemberResponse>.Failed(OrganizationFailure.DuplicateMember);
+            return Failure<OrganizationMemberResponse>(OrganizationFailure.DuplicateMember);
         }
 
-        return OrganizationServiceResult<OrganizationMemberResponse>.Success(new OrganizationMemberResponse(
+        return Success(new OrganizationMemberResponse(
             member.Id,
             user.Id,
             user.Email,
@@ -317,7 +314,7 @@ public sealed class OrganizationService(
             member.JoinedAt));
     }
 
-    public async Task<OrganizationServiceResult<OrganizationMemberResponse>> ChangeMemberRoleAsync(
+    public async Task<ServiceResult<OrganizationMemberResponse, OrganizationFailure>> ChangeMemberRoleAsync(
         Guid organizationId,
         Guid memberId,
         ChangeOrganizationMemberRoleRequest request,
@@ -326,12 +323,12 @@ public sealed class OrganizationService(
         var access = await RequireOwnerAsync(organizationId, cancellationToken);
         if (access != OrganizationFailure.None)
         {
-            return OrganizationServiceResult<OrganizationMemberResponse>.Failed(access);
+            return Failure<OrganizationMemberResponse>(access);
         }
 
         if (!TryParseRole(request.Role, out var role))
         {
-            return OrganizationServiceResult<OrganizationMemberResponse>.Validation(new Dictionary<string, string[]>
+            return Validation<OrganizationMemberResponse>(new Dictionary<string, string[]>
             {
                 ["role"] = [ValidRolesMessage]
             });
@@ -350,21 +347,21 @@ public sealed class OrganizationService(
                     cancellationToken);
             if (member is null)
             {
-                return OrganizationServiceResult<OrganizationMemberResponse>.Failed(OrganizationFailure.NotFound);
+                return Failure<OrganizationMemberResponse>(OrganizationFailure.NotFound);
             }
 
             if (member.Role == OrganizationRole.Owner &&
                 role != OrganizationRole.Owner &&
                 await IsLastOwnerAsync(organizationId, cancellationToken))
             {
-                return OrganizationServiceResult<OrganizationMemberResponse>.Failed(OrganizationFailure.CannotRemoveLastOwner);
+                return Failure<OrganizationMemberResponse>(OrganizationFailure.CannotRemoveLastOwner);
             }
 
             member.Role = role;
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
-            return OrganizationServiceResult<OrganizationMemberResponse>.Success(new OrganizationMemberResponse(
+            return Success(new OrganizationMemberResponse(
                 member.Id,
                 member.UserId,
                 member.User.Email,
@@ -372,13 +369,13 @@ public sealed class OrganizationService(
                 OrganizationMemberResponse.FormatRole(member.Role),
                 member.JoinedAt));
         }
-        catch (Exception exception) when (IsSerializationFailure(exception))
+        catch (Exception exception) when (PostgresErrors.IsSerializationFailure(exception))
         {
-            return OrganizationServiceResult<OrganizationMemberResponse>.Failed(OrganizationFailure.CannotRemoveLastOwner);
+            return Failure<OrganizationMemberResponse>(OrganizationFailure.CannotRemoveLastOwner);
         }
     }
 
-    public async Task<OrganizationServiceResult<object>> RemoveMemberAsync(
+    public async Task<ServiceResult<object, OrganizationFailure>> RemoveMemberAsync(
         Guid organizationId,
         Guid memberId,
         CancellationToken cancellationToken)
@@ -386,7 +383,7 @@ public sealed class OrganizationService(
         var access = await RequireOwnerAsync(organizationId, cancellationToken);
         if (access != OrganizationFailure.None)
         {
-            return OrganizationServiceResult<object>.Failed(access);
+            return Failure<object>(access);
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
@@ -400,40 +397,30 @@ public sealed class OrganizationService(
                 cancellationToken);
             if (member is null)
             {
-                return OrganizationServiceResult<object>.Failed(OrganizationFailure.NotFound);
+                return Failure<object>(OrganizationFailure.NotFound);
             }
 
             if (member.Role == OrganizationRole.Owner && await IsLastOwnerAsync(organizationId, cancellationToken))
             {
-                return OrganizationServiceResult<object>.Failed(OrganizationFailure.CannotRemoveLastOwner);
+                return Failure<object>(OrganizationFailure.CannotRemoveLastOwner);
             }
 
             dbContext.OrganizationMembers.Remove(member);
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
-            return OrganizationServiceResult<object>.Success(Empty);
+            return Success<object>(Empty);
         }
-        catch (Exception exception) when (IsSerializationFailure(exception))
+        catch (Exception exception) when (PostgresErrors.IsSerializationFailure(exception))
         {
-            return OrganizationServiceResult<object>.Failed(OrganizationFailure.CannotRemoveLastOwner);
+            return Failure<object>(OrganizationFailure.CannotRemoveLastOwner);
         }
     }
 
     private async Task<OrganizationFailure> RequireOwnerAsync(Guid organizationId, CancellationToken cancellationToken)
     {
-        if (!currentUser.IsAuthenticated)
-        {
-            return OrganizationFailure.Unauthorized;
-        }
-
-        var membership = await organizationAccess.GetMembershipAsync(organizationId, cancellationToken);
-        if (membership is null)
-        {
-            return OrganizationFailure.NotFound;
-        }
-
-        return OwnerOnly.Contains(membership.Role) ? OrganizationFailure.None : OrganizationFailure.Forbidden;
+        var access = await organizationAccess.RequireAnyRoleAsync(organizationId, OwnerOnly, cancellationToken);
+        return access.IsAllowed ? OrganizationFailure.None : ToOrganizationFailure(access.Status);
     }
 
     private async Task<bool> IsLastOwnerAsync(Guid organizationId, CancellationToken cancellationToken)
@@ -464,19 +451,15 @@ public sealed class OrganizationService(
         return errors;
     }
 
-    private static Dictionary<string, string[]> ValidateEmail(string? email)
+    private static OrganizationFailure ToOrganizationFailure(OrganizationAccessStatus status)
     {
-        var errors = new Dictionary<string, string[]>();
-        var trimmedEmail = email?.Trim() ?? string.Empty;
-
-        if (trimmedEmail.Length == 0 ||
-            trimmedEmail.Length > MaxEmailLength ||
-            !trimmedEmail.Contains('@', StringComparison.Ordinal))
+        return status switch
         {
-            errors["email"] = [$"A valid email up to {MaxEmailLength} characters is required."];
-        }
-
-        return errors;
+            OrganizationAccessStatus.Unauthorized => OrganizationFailure.Unauthorized,
+            OrganizationAccessStatus.NotFound => OrganizationFailure.NotFound,
+            OrganizationAccessStatus.Forbidden => OrganizationFailure.Forbidden,
+            _ => OrganizationFailure.None
+        };
     }
 
     private static bool TryParseRole(string? value, out OrganizationRole role)
@@ -509,19 +492,12 @@ public sealed class OrganizationService(
 
     private static string NormalizeSlug(string slug) => slug.Trim().ToLowerInvariant();
 
-    private static string NormalizeEmail(string email) => email.Trim().ToUpperInvariant();
+    private static ServiceResult<T, OrganizationFailure> Success<T>(T value) =>
+        ServiceResult<T, OrganizationFailure>.Success(value, OrganizationFailure.None);
 
-    private static bool IsUniqueViolation(DbUpdateException exception, string constraintName) =>
-        exception.InnerException is PostgresException
-        {
-            SqlState: PostgresErrorCodes.UniqueViolation,
-            ConstraintName: var actualConstraintName
-        } && actualConstraintName == constraintName;
+    private static ServiceResult<T, OrganizationFailure> Validation<T>(IReadOnlyDictionary<string, string[]> errors) =>
+        ServiceResult<T, OrganizationFailure>.Validation(OrganizationFailure.Validation, errors);
 
-    private static bool IsSerializationFailure(Exception exception) =>
-        exception is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure } ||
-        exception is DbUpdateException
-        {
-            InnerException: PostgresException { SqlState: PostgresErrorCodes.SerializationFailure }
-        };
+    private static ServiceResult<T, OrganizationFailure> Failure<T>(OrganizationFailure failure) =>
+        ServiceResult<T, OrganizationFailure>.Failed(failure);
 }

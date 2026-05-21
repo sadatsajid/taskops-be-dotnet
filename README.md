@@ -16,7 +16,9 @@
 
 ```text
 src/
-  TaskOps.Api/          # Web API, features, persistence, infrastructure
+  TaskOps.Api/          # Web API, feature slices, persistence, infrastructure
+    Features/           # Auth, Organizations, System, and future product slices
+    Shared/             # Shared API envelopes/results and security helpers
 tests/
   TaskOps.Api.Tests/    # PostgreSQL-backed integration tests
 docs/                   # Setup and phase notes (e.g. phase-0-setup.md)
@@ -68,6 +70,14 @@ The app uses `Properties/launchSettings.json` (e.g. **http://localhost:5000** fo
 | `POST /api/auth/refresh` | Rotate a refresh token |
 | `POST /api/auth/logout` | Revoke a refresh token |
 | `GET /api/auth/me` | Return the authenticated user |
+| `GET /api/organizations` | List organizations for the authenticated user |
+| `POST /api/organizations` | Create an organization |
+| `GET /api/organizations/{organizationId}` | Get an organization scoped by membership |
+| `PUT /api/organizations/{organizationId}` | Update organization settings as owner |
+| `GET /api/organizations/{organizationId}/members` | List organization members |
+| `POST /api/organizations/{organizationId}/members` | Add an organization member as owner |
+| `PUT /api/organizations/{organizationId}/members/{memberId}/role` | Change a member role as owner |
+| `DELETE /api/organizations/{organizationId}/members/{memberId}` | Remove a member as owner |
 
 In Development, OpenAPI is available under `/openapi/v1.json` and Swagger UI is mapped by the project’s OpenAPI UI wiring.
 

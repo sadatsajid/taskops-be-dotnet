@@ -55,8 +55,8 @@ public static class OrganizationEndpoints
     {
         var result = await organizationService.CreateOrganizationAsync(request, cancellationToken);
 
-        return result.Failure == OrganizationFailure.None && result.Value is not null
-            ? Results.Created($"/api/organizations/{result.Value.Id}", ApiResponse.Success(result.Value, httpContext.TraceIdentifier))
+        return result.IsSuccess(OrganizationFailure.None)
+            ? EndpointResults.Created($"/api/organizations/{result.Value!.Id}", result.Value, httpContext)
             : ToFailureResult(result);
     }
 
@@ -101,8 +101,8 @@ public static class OrganizationEndpoints
     {
         var result = await organizationService.AddMemberAsync(organizationId, request, cancellationToken);
 
-        return result.Failure == OrganizationFailure.None && result.Value is not null
-            ? Results.Created($"/api/organizations/{organizationId}/members/{result.Value.Id}", ApiResponse.Success(result.Value, httpContext.TraceIdentifier))
+        return result.IsSuccess(OrganizationFailure.None)
+            ? EndpointResults.Created($"/api/organizations/{organizationId}/members/{result.Value!.Id}", result.Value, httpContext)
             : ToFailureResult(result);
     }
 
@@ -131,18 +131,18 @@ public static class OrganizationEndpoints
             : ToFailureResult(result);
     }
 
-    private static IResult ToOkResult<T>(OrganizationServiceResult<T> result, HttpContext httpContext)
+    private static IResult ToOkResult<T>(ServiceResult<T, OrganizationFailure> result, HttpContext httpContext)
     {
-        return result.Failure == OrganizationFailure.None && result.Value is not null
-            ? Results.Ok(ApiResponse.Success(result.Value, httpContext.TraceIdentifier))
+        return result.IsSuccess(OrganizationFailure.None)
+            ? EndpointResults.Ok(result.Value!, httpContext)
             : ToFailureResult(result);
     }
 
-    private static IResult ToFailureResult<T>(OrganizationServiceResult<T> result)
+    private static IResult ToFailureResult<T>(ServiceResult<T, OrganizationFailure> result)
     {
         return result.Failure switch
         {
-            OrganizationFailure.Validation => Results.ValidationProblem(result.Errors?.ToDictionary() ?? []),
+            OrganizationFailure.Validation => EndpointResults.ValidationProblem(result.Errors),
             OrganizationFailure.Unauthorized => Results.Unauthorized(),
             OrganizationFailure.Forbidden => Results.Problem(
                 title: "Forbidden.",

@@ -337,6 +337,8 @@ This is where many beginner APIs rot.
 
 If every endpoint only checks `User.Identity.IsAuthenticated`, the app is fake-secure. Every organization and project query must be scoped to the current user's membership.
 
+Use an explicit organization-access helper that distinguishes unauthenticated users, non-members, and members without enough role. Do not let `null` membership checks spread across endpoints or services.
+
 ### Exit Criteria
 
 - User cannot access an organization they do not belong to

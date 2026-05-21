@@ -24,6 +24,7 @@ src/
   TaskOps.Api/
     Features/
       Auth/
+      Organizations/
       System/
     Infrastructure/
     Persistence/
@@ -44,12 +45,14 @@ Feature code belongs in `src/TaskOps.Api/Features/<FeatureName>`. Startup and cr
 ## Design Rules
 
 - Keep `Program.cs` small. Prefer focused registration/middleware extension methods.
+- Keep feature service registration inside the relevant feature slice when practical; infrastructure composition should stay focused on platform wiring.
 - Use EF Core directly through `TaskOpsDbContext`; do not add repository abstractions by default.
 - Do not return EF entities from endpoints. Project into response DTOs.
 - Keep lazy loading off. Use explicit `Include` only when entity graphs are genuinely needed.
 - Put entity configuration in `Persistence/Configurations`.
 - Treat PostgreSQL behavior as real behavior. Do not use EF Core in-memory provider for persistence tests.
 - Organization and project access checks must be scoped by membership.
+- Organization access helpers should return explicit outcomes (`Unauthorized`, `NotFound`, `Forbidden`, allowed membership) instead of ambiguous nullable membership checks.
 - Access tokens contain user identity only. Do not put organization roles in JWTs.
 - Refresh tokens are stored hashed, rotated on refresh, and revoked on logout.
 
@@ -62,6 +65,7 @@ Feature code belongs in `src/TaskOps.Api/Features/<FeatureName>`. Startup and cr
 - Pass `CancellationToken` through database and network calls.
 - Use explicit mapping code between entities and DTOs. Do not add reflection-based mappers by default.
 - Represent expected business failures with result-style return values or stable API responses, not thrown exceptions.
+- Prefer small shared-kernel helpers for stable mechanics such as API result envelopes, email normalization, and PostgreSQL error translation; do not turn feature-specific rules into generic frameworks prematurely.
 
 ## Data Access Rules
 

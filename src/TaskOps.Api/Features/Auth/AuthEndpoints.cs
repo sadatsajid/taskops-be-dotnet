@@ -37,8 +37,8 @@ public static class AuthEndpoints
     {
         var result = await authService.RegisterAsync(request, cancellationToken);
 
-        return result.Failure == AuthFailure.None && result.Value is not null
-            ? Results.Created($"/api/auth/users/{result.Value.CurrentUser.Id}", ApiResponse.Success(result.Value, httpContext.TraceIdentifier))
+        return result.IsSuccess(AuthFailure.None)
+            ? EndpointResults.Created($"/api/auth/users/{result.Value!.CurrentUser.Id}", result.Value, httpContext)
             : ToFailureResult(result);
     }
 
@@ -86,18 +86,18 @@ public static class AuthEndpoints
         return ToOkResult(result, httpContext);
     }
 
-    private static IResult ToOkResult<T>(AuthServiceResult<T> result, HttpContext httpContext)
+    private static IResult ToOkResult<T>(ServiceResult<T, AuthFailure> result, HttpContext httpContext)
     {
-        return result.Failure == AuthFailure.None && result.Value is not null
-            ? Results.Ok(ApiResponse.Success(result.Value, httpContext.TraceIdentifier))
+        return result.IsSuccess(AuthFailure.None)
+            ? EndpointResults.Ok(result.Value!, httpContext)
             : ToFailureResult(result);
     }
 
-    private static IResult ToFailureResult<T>(AuthServiceResult<T> result)
+    private static IResult ToFailureResult<T>(ServiceResult<T, AuthFailure> result)
     {
         return result.Failure switch
         {
-            AuthFailure.Validation => Results.ValidationProblem(result.Errors?.ToDictionary() ?? []),
+            AuthFailure.Validation => EndpointResults.ValidationProblem(result.Errors),
             AuthFailure.DuplicateEmail => Results.Problem(
                 title: "Duplicate email.",
                 detail: "A user with this email already exists.",
