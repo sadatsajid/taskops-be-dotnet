@@ -33,3 +33,24 @@ Until that is added, run .NET commands with:
 ```
 
 The repository includes `global.json` to pin the SDK to `10.0.300`.
+
+## Local Tooling
+
+Restore repo-local tools after cloning:
+
+```bash
+dotnet tool restore
+```
+
+Install Git hooks once:
+
+```bash
+dotnet husky install
+```
+
+Husky.Net uses `.husky/task-runner.json` for hook tasks. The current contract is:
+
+- `pre-commit`: verify formatting without restoring packages.
+- `pre-push`: restore, build, and run the PostgreSQL-backed integration tests.
+
+Docker must be running before `pre-push` because the tests use Testcontainers.

@@ -28,11 +28,13 @@ TaskOps_Project_Roadmap.md   # Goals, architecture evolution, backlog
 
 - **.NET SDK** matching `global.json` (currently **10.0.300**)
 - **Docker** (optional but recommended for PostgreSQL)
-- **EF Core CLI** — restore local tools after clone:
+- **Local .NET tools** — restore after clone:
 
   ```bash
   dotnet tool restore
   ```
+
+  This restores EF Core CLI and Husky.Net.
 
 ## Quick start
 
@@ -95,6 +97,25 @@ Build the whole solution with single-node MSBuild execution:
 ```bash
 dotnet build TaskOps.slnx -m:1
 ```
+
+## Local validation hooks
+
+The repository uses Husky.Net for Git hook validation.
+
+After cloning and restoring tools, install the hooks once:
+
+```bash
+dotnet husky install
+```
+
+The hooks run the same commands developers should run manually:
+
+| Hook | Validation |
+|------|------------|
+| `pre-commit` | `dotnet format TaskOps.slnx --verify-no-changes --no-restore` |
+| `pre-push` | `dotnet restore TaskOps.slnx`, `dotnet build TaskOps.slnx -m:1 --no-restore`, `dotnet test tests/TaskOps.Api.Tests/TaskOps.Api.Tests.csproj --no-build` |
+
+`pre-push` requires Docker because the integration tests use Testcontainers PostgreSQL. Local hooks may be bypassed with `--no-verify` for exceptional cases, but CI should remain the merge authority.
 
 ## Configuration
 

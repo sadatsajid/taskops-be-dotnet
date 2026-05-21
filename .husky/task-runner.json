@@ -1,0 +1,46 @@
+{
+   "$schema": "https://alirezanet.github.io/Husky.Net/schema.json",
+   "tasks": [
+      {
+         "name": "format-check",
+         "group": "pre-commit",
+         "command": "dotnet",
+         "args": [
+            "format",
+            "TaskOps.slnx",
+            "--verify-no-changes",
+            "--no-restore"
+         ]
+      },
+      {
+         "name": "restore",
+         "group": "pre-push",
+         "command": "dotnet",
+         "args": [
+            "restore",
+            "TaskOps.slnx"
+         ]
+      },
+      {
+         "name": "build",
+         "group": "pre-push",
+         "command": "dotnet",
+         "args": [
+            "build",
+            "TaskOps.slnx",
+            "-m:1",
+            "--no-restore"
+         ]
+      },
+      {
+         "name": "test",
+         "group": "pre-push",
+         "command": "dotnet",
+         "args": [
+            "test",
+            "tests/TaskOps.Api.Tests/TaskOps.Api.Tests.csproj",
+            "--no-build"
+         ]
+      }
+   ]
+}
