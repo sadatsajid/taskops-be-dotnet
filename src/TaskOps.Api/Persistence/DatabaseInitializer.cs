@@ -1,21 +1,23 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using TaskOps.Api.Persistence.Entities;
 
 namespace TaskOps.Api.Persistence;
 
 public static class DatabaseInitializer
 {
-    public static async Task InitializeDatabaseAsync(this IServiceProvider services, IConfiguration configuration, IHostEnvironment environment)
+    public static async Task InitializeDatabaseAsync(this IServiceProvider services, IHostEnvironment environment)
     {
-        var databaseOptions = configuration.GetSection("Database").Get<DatabaseOptions>() ?? new DatabaseOptions();
+        await using var scope = services.CreateAsyncScope();
+        var databaseOptions = scope.ServiceProvider.GetRequiredService<IOptions<DatabaseOptions>>().Value;
 
         if (!databaseOptions.ApplyMigrationsOnStartup && !databaseOptions.SeedDevelopmentData)
         {
             return;
         }
 
-        await using var scope = services.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<TaskOpsDbContext>();
+        var timeProvider = scope.ServiceProvider.GetRequiredService<TimeProvider>();
 
         if (databaseOptions.ApplyMigrationsOnStartup)
         {
@@ -24,11 +26,11 @@ public static class DatabaseInitializer
 
         if ((environment.IsDevelopment() || environment.IsEnvironment("Testing")) && databaseOptions.SeedDevelopmentData)
         {
-            await SeedDevelopmentDataAsync(dbContext);
+            await SeedDevelopmentDataAsync(dbContext, timeProvider);
         }
     }
 
-    private static async Task SeedDevelopmentDataAsync(TaskOpsDbContext dbContext)
+    private static async Task SeedDevelopmentDataAsync(TaskOpsDbContext dbContext, TimeProvider timeProvider)
     {
         if (await dbContext.Users.AnyAsync())
         {
@@ -62,7 +64,7 @@ public static class DatabaseInitializer
             UserId = userId,
             OrganizationId = organizationId,
             Role = OrganizationRole.Owner,
-            JoinedAt = DateTimeOffset.UtcNow
+            JoinedAt = timeProvider.GetUtcNow()
         };
 
         var project = new Project

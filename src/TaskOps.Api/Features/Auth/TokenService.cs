@@ -10,16 +10,17 @@ using TaskOps.Api.Shared.Security;
 
 namespace TaskOps.Api.Features.Auth;
 
-public sealed class TokenService(IOptions<JwtOptions> options) : ITokenService
+public sealed class TokenService(
+    IOptions<JwtOptions> options,
+    IJwtSigningKeyProvider signingKeyProvider,
+    TimeProvider timeProvider) : ITokenService
 {
     private readonly JwtOptions _options = options.Value;
 
     public AccessTokenResult CreateAccessToken(User user)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = timeProvider.GetUtcNow();
         var expiresAt = now.AddMinutes(_options.AccessTokenMinutes);
-        var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SigningKey));
-        var credentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
 
         var claims = new Claim[]
         {
@@ -35,7 +36,7 @@ public sealed class TokenService(IOptions<JwtOptions> options) : ITokenService
             claims: claims,
             notBefore: now.UtcDateTime,
             expires: expiresAt.UtcDateTime,
-            signingCredentials: credentials);
+            signingCredentials: signingKeyProvider.CreateSigningCredentials());
 
         return new AccessTokenResult(new JwtSecurityTokenHandler().WriteToken(token), expiresAt);
     }
@@ -48,7 +49,7 @@ public sealed class TokenService(IOptions<JwtOptions> options) : ITokenService
         return new RefreshTokenResult(
             token,
             HashRefreshToken(token),
-            DateTimeOffset.UtcNow.AddDays(_options.RefreshTokenDays));
+            timeProvider.GetUtcNow().AddDays(_options.RefreshTokenDays));
     }
 
     public string HashRefreshToken(string refreshToken)

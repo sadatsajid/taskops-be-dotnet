@@ -3,7 +3,9 @@ using TaskOps.Api.Persistence.Entities;
 
 namespace TaskOps.Api.Persistence;
 
-public sealed class TaskOpsDbContext(DbContextOptions<TaskOpsDbContext> options) : DbContext(options)
+public sealed class TaskOpsDbContext(
+    DbContextOptions<TaskOpsDbContext> options,
+    TimeProvider timeProvider) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
 
@@ -36,7 +38,7 @@ public sealed class TaskOpsDbContext(DbContextOptions<TaskOpsDbContext> options)
 
     private void ApplyAuditFields()
     {
-        var utcNow = DateTimeOffset.UtcNow;
+        var utcNow = timeProvider.GetUtcNow();
 
         foreach (var entry in ChangeTracker.Entries<AuditableEntity>())
         {

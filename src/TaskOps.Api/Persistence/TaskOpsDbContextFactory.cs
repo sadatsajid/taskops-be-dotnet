@@ -20,6 +20,6 @@ public sealed class TaskOpsDbContextFactory : IDesignTimeDbContextFactory<TaskOp
         var optionsBuilder = new DbContextOptionsBuilder<TaskOpsDbContext>();
         optionsBuilder.UseNpgsql(connectionString);
 
-        return new TaskOpsDbContext(optionsBuilder.Options);
+        return new TaskOpsDbContext(optionsBuilder.Options, TimeProvider.System);
     }
 }
