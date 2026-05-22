@@ -1,3 +1,4 @@
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using TaskOps.Api.Persistence;
 using TaskOps.Api.Persistence.Entities;
@@ -9,7 +10,9 @@ namespace TaskOps.Api.Features.Projects;
 public sealed class ProjectService(
     TaskOpsDbContext dbContext,
     IOrganizationAccessService organizationAccess,
-    TimeProvider timeProvider) : IProjectService
+    TimeProvider timeProvider,
+    IValidator<CreateProjectRequest> createProjectValidator,
+    IValidator<UpdateProjectRequest> updateProjectValidator) : IProjectService
 {
     private static readonly object Empty = new();
     private static readonly OrganizationRole[] ProjectManagers =
@@ -18,10 +21,6 @@ public sealed class ProjectService(
         OrganizationRole.Admin,
         OrganizationRole.ProjectManager
     ];
-    private const int MaxNameLength = 160;
-    private const int MaxKeyLength = 20;
-    private const int MaxDescriptionLength = 2000;
-
     public async Task<ServiceResult<PagedResponse<ProjectListItemResponse>, ProjectFailure>> ListProjectsAsync(
         Guid organizationId,
         PageRequest page,
@@ -71,13 +70,13 @@ public sealed class ProjectService(
             return Failure<ProjectResponse>(access);
         }
 
-        var errors = ValidateProject(request.Name, request.Key, request.Description);
-        if (errors.Count > 0)
+        var validation = await createProjectValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
         {
-            return Validation<ProjectResponse>(errors);
+            return Validation<ProjectResponse>(validation.ToErrorDictionary());
         }
 
-        var normalizedKey = NormalizeKey(request.Key);
+        var normalizedKey = ProjectValidation.NormalizeKey(request.Key);
         var keyTaken = await dbContext.Projects.AnyAsync(
             project => project.OrganizationId == organizationId && project.Key == normalizedKey,
             cancellationToken);
@@ -92,7 +91,7 @@ public sealed class ProjectService(
             OrganizationId = organizationId,
             Name = request.Name.Trim(),
             Key = normalizedKey,
-            Description = NormalizeDescription(request.Description),
+            Description = ProjectValidation.NormalizeDescription(request.Description),
             IsArchived = false
         };
 
@@ -152,10 +151,10 @@ public sealed class ProjectService(
             return Failure<ProjectResponse>(access);
         }
 
-        var errors = ValidateProject(request.Name, request.Key, request.Description);
-        if (errors.Count > 0)
+        var validation = await updateProjectValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
         {
-            return Validation<ProjectResponse>(errors);
+            return Validation<ProjectResponse>(validation.ToErrorDictionary());
         }
 
         var project = await dbContext.Projects.FirstOrDefaultAsync(
@@ -166,7 +165,7 @@ public sealed class ProjectService(
             return Failure<ProjectResponse>(ProjectFailure.NotFound);
         }
 
-        var normalizedKey = NormalizeKey(request.Key);
+        var normalizedKey = ProjectValidation.NormalizeKey(request.Key);
         var keyTaken = await dbContext.Projects.AnyAsync(
             project =>
                 project.OrganizationId == organizationId &&
@@ -180,7 +179,7 @@ public sealed class ProjectService(
 
         project.Name = request.Name.Trim();
         project.Key = normalizedKey;
-        project.Description = NormalizeDescription(request.Description);
+        project.Description = ProjectValidation.NormalizeDescription(request.Description);
 
         try
         {
@@ -222,57 +221,6 @@ public sealed class ProjectService(
     {
         var access = await organizationAccess.RequireAnyRoleAsync(organizationId, ProjectManagers, cancellationToken);
         return access.IsAllowed ? ProjectFailure.None : ToProjectFailure(access.Status);
-    }
-
-    private static Dictionary<string, string[]> ValidateProject(string? name, string? key, string? description)
-    {
-        var errors = new Dictionary<string, string[]>();
-        var trimmedName = name?.Trim() ?? string.Empty;
-        var normalizedKey = NormalizeKey(key ?? string.Empty);
-        var trimmedDescription = description?.Trim();
-
-        if (trimmedName.Length == 0 || trimmedName.Length > MaxNameLength)
-        {
-            errors["name"] = [$"Name must be between 1 and {MaxNameLength} characters."];
-        }
-
-        if (!IsValidKey(normalizedKey))
-        {
-            errors["key"] = [$"Key must be between 1 and {MaxKeyLength} characters and contain only uppercase letters, numbers, and hyphens."];
-        }
-
-        if (trimmedDescription?.Length > MaxDescriptionLength)
-        {
-            errors["description"] = [$"Description must be {MaxDescriptionLength} characters or fewer."];
-        }
-
-        return errors;
-    }
-
-    private static bool IsValidKey(string key)
-    {
-        if (key.Length == 0 || key.Length > MaxKeyLength)
-        {
-            return false;
-        }
-
-        if (!char.IsLetterOrDigit(key[0]) || !char.IsLetterOrDigit(key[^1]))
-        {
-            return false;
-        }
-
-        return key.All(character =>
-            character is '-' ||
-            character is >= 'A' and <= 'Z' ||
-            character is >= '0' and <= '9');
-    }
-
-    private static string NormalizeKey(string key) => key.Trim().ToUpperInvariant();
-
-    private static string? NormalizeDescription(string? description)
-    {
-        var trimmed = description?.Trim();
-        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
     }
 
     private static ProjectResponse ToResponse(Project project) =>

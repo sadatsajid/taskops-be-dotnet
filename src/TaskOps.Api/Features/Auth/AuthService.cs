@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using FluentValidation;
 using TaskOps.Api.Persistence;
 using TaskOps.Api.Persistence.Entities;
 using TaskOps.Api.Shared.Api;
@@ -12,20 +13,22 @@ public sealed class AuthService(
     IPasswordHasher<User> passwordHasher,
     ITokenService tokenService,
     ICurrentUserService currentUser,
-    TimeProvider timeProvider) : IAuthService
+    TimeProvider timeProvider,
+    IValidator<RegisterRequest> registerValidator,
+    IValidator<LoginRequest> loginValidator,
+    IValidator<RefreshTokenRequest> refreshTokenValidator,
+    IValidator<LogoutRequest> logoutValidator) : IAuthService
 {
     private static readonly object Empty = new();
-    private const int MaxDisplayNameLength = 120;
-    private const int MinPasswordLength = 8;
 
     public async Task<ServiceResult<AuthResponse, AuthFailure>> RegisterAsync(
         RegisterRequest request,
         CancellationToken cancellationToken)
     {
-        var errors = ValidateRegistration(request);
-        if (errors.Count > 0)
+        var validation = await registerValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
         {
-            return ServiceResult<AuthResponse, AuthFailure>.Validation(AuthFailure.Validation, errors);
+            return ServiceResult<AuthResponse, AuthFailure>.Validation(AuthFailure.Validation, validation.ToErrorDictionary());
         }
 
         var normalizedEmail = EmailRules.Normalize(request.Email);
@@ -64,10 +67,10 @@ public sealed class AuthService(
         LoginRequest request,
         CancellationToken cancellationToken)
     {
-        var errors = ValidateLogin(request);
-        if (errors.Count > 0)
+        var validation = await loginValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
         {
-            return ServiceResult<AuthResponse, AuthFailure>.Validation(AuthFailure.Validation, errors);
+            return ServiceResult<AuthResponse, AuthFailure>.Validation(AuthFailure.Validation, validation.ToErrorDictionary());
         }
 
         var normalizedEmail = EmailRules.Normalize(request.Email);
@@ -93,9 +96,10 @@ public sealed class AuthService(
         RefreshTokenRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        var validation = await refreshTokenValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
         {
-            return ServiceResult<AuthResponse, AuthFailure>.Validation(AuthFailure.Validation, RefreshTokenRequired());
+            return ServiceResult<AuthResponse, AuthFailure>.Validation(AuthFailure.Validation, validation.ToErrorDictionary());
         }
 
         var refreshTokenHash = tokenService.HashRefreshToken(request.RefreshToken);
@@ -150,9 +154,10 @@ public sealed class AuthService(
             return ServiceResult<object, AuthFailure>.Failed(AuthFailure.Unauthorized);
         }
 
-        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        var validation = await logoutValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
         {
-            return ServiceResult<object, AuthFailure>.Validation(AuthFailure.Validation, RefreshTokenRequired());
+            return ServiceResult<object, AuthFailure>.Validation(AuthFailure.Validation, validation.ToErrorDictionary());
         }
 
         var refreshTokenHash = tokenService.HashRefreshToken(request.RefreshToken);
@@ -218,41 +223,4 @@ public sealed class AuthService(
             new CurrentUserResponse(user.Id, user.Email, user.DisplayName));
     }
 
-    private static Dictionary<string, string[]> ValidateRegistration(RegisterRequest request)
-    {
-        var errors = ValidateLoginShape(request.Email, request.Password);
-
-        if (!string.IsNullOrWhiteSpace(request.Password) && request.Password.Length < MinPasswordLength)
-        {
-            errors["password"] = [$"Password must be at least {MinPasswordLength} characters."];
-        }
-
-        var displayName = request.DisplayName?.Trim() ?? string.Empty;
-        if (displayName.Length == 0 || displayName.Length > MaxDisplayNameLength)
-        {
-            errors["displayName"] = [$"Display name must be between 1 and {MaxDisplayNameLength} characters."];
-        }
-
-        return errors;
-    }
-
-    private static Dictionary<string, string[]> ValidateLogin(LoginRequest request) =>
-        ValidateLoginShape(request.Email, request.Password);
-
-    private static Dictionary<string, string[]> ValidateLoginShape(string? email, string? password)
-    {
-        var errors = EmailRules.Validate(email);
-
-        if (string.IsNullOrWhiteSpace(password))
-        {
-            errors["password"] = ["Password is required."];
-        }
-
-        return errors;
-    }
-
-    private static Dictionary<string, string[]> RefreshTokenRequired() => new()
-    {
-        ["refreshToken"] = ["Refresh token is required."]
-    };
 }

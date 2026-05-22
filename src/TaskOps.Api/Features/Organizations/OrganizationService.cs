@@ -1,4 +1,5 @@
 using System.Data;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using TaskOps.Api.Persistence;
 using TaskOps.Api.Persistence.Entities;
@@ -11,14 +12,14 @@ public sealed class OrganizationService(
     TaskOpsDbContext dbContext,
     ICurrentUserService currentUser,
     IOrganizationAccessService organizationAccess,
-    TimeProvider timeProvider) : IOrganizationService
+    TimeProvider timeProvider,
+    IValidator<CreateOrganizationRequest> createOrganizationValidator,
+    IValidator<UpdateOrganizationRequest> updateOrganizationValidator,
+    IValidator<AddOrganizationMemberRequest> addMemberValidator,
+    IValidator<ChangeOrganizationMemberRoleRequest> changeMemberRoleValidator) : IOrganizationService
 {
     private static readonly object Empty = new();
     private static readonly OrganizationRole[] OwnerOnly = [OrganizationRole.Owner];
-    private static readonly string[] RoleNames = Enum.GetNames<OrganizationRole>();
-    private static readonly string ValidRolesMessage = $"Role must be one of {string.Join(", ", RoleNames)}.";
-    private const int MaxNameLength = 160;
-    private const int MaxSlugLength = 100;
 
     public async Task<ServiceResult<PagedResponse<OrganizationListItemResponse>, OrganizationFailure>> ListOrganizationsAsync(
         PageRequest page,
@@ -62,13 +63,13 @@ public sealed class OrganizationService(
             return Failure<OrganizationResponse>(OrganizationFailure.Unauthorized);
         }
 
-        var errors = ValidateOrganization(request.Name, request.Slug);
-        if (errors.Count > 0)
+        var validation = await createOrganizationValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
         {
-            return Validation<OrganizationResponse>(errors);
+            return Validation<OrganizationResponse>(validation.ToErrorDictionary());
         }
 
-        var normalizedSlug = NormalizeSlug(request.Slug);
+        var normalizedSlug = OrganizationValidation.NormalizeSlug(request.Slug);
         if (await dbContext.Organizations.AnyAsync(organization => organization.Slug == normalizedSlug, cancellationToken))
         {
             return Failure<OrganizationResponse>(OrganizationFailure.DuplicateSlug);
@@ -168,10 +169,10 @@ public sealed class OrganizationService(
             return Failure<OrganizationResponse>(access);
         }
 
-        var errors = ValidateOrganization(request.Name, request.Slug);
-        if (errors.Count > 0)
+        var validation = await updateOrganizationValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
         {
-            return Validation<OrganizationResponse>(errors);
+            return Validation<OrganizationResponse>(validation.ToErrorDictionary());
         }
 
         var organization = await dbContext.Organizations.FirstOrDefaultAsync(
@@ -182,7 +183,7 @@ public sealed class OrganizationService(
             return Failure<OrganizationResponse>(OrganizationFailure.NotFound);
         }
 
-        var normalizedSlug = NormalizeSlug(request.Slug);
+        var normalizedSlug = OrganizationValidation.NormalizeSlug(request.Slug);
         var slugTaken = await dbContext.Organizations.AnyAsync(
             organization => organization.Id != organizationId && organization.Slug == normalizedSlug,
             cancellationToken);
@@ -255,17 +256,13 @@ public sealed class OrganizationService(
             return Failure<OrganizationMemberResponse>(access);
         }
 
-        var errors = EmailRules.Validate(request.Email);
-        if (!TryParseRole(request.Role, out var role))
+        var validation = await addMemberValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
         {
-            errors["role"] = [ValidRolesMessage];
+            return Validation<OrganizationMemberResponse>(validation.ToErrorDictionary());
         }
 
-        if (errors.Count > 0)
-        {
-            return Validation<OrganizationMemberResponse>(errors);
-        }
-
+        _ = OrganizationValidation.TryParseRole(request.Role, out var role);
         var normalizedEmail = EmailRules.Normalize(request.Email);
         var user = await dbContext.Users
             .AsNoTracking()
@@ -326,13 +323,13 @@ public sealed class OrganizationService(
             return Failure<OrganizationMemberResponse>(access);
         }
 
-        if (!TryParseRole(request.Role, out var role))
+        var validation = await changeMemberRoleValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
         {
-            return Validation<OrganizationMemberResponse>(new Dictionary<string, string[]>
-            {
-                ["role"] = [ValidRolesMessage]
-            });
+            return Validation<OrganizationMemberResponse>(validation.ToErrorDictionary());
         }
+
+        _ = OrganizationValidation.TryParseRole(request.Role, out var role);
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             IsolationLevel.Serializable,
@@ -432,25 +429,6 @@ public sealed class OrganizationService(
         return ownerCount <= 1;
     }
 
-    private static Dictionary<string, string[]> ValidateOrganization(string? name, string? slug)
-    {
-        var errors = new Dictionary<string, string[]>();
-        var trimmedName = name?.Trim() ?? string.Empty;
-        var normalizedSlug = NormalizeSlug(slug ?? string.Empty);
-
-        if (trimmedName.Length == 0 || trimmedName.Length > MaxNameLength)
-        {
-            errors["name"] = [$"Name must be between 1 and {MaxNameLength} characters."];
-        }
-
-        if (!IsValidSlug(normalizedSlug))
-        {
-            errors["slug"] = [$"Slug must be between 1 and {MaxSlugLength} characters and contain only lowercase letters, numbers, and hyphens."];
-        }
-
-        return errors;
-    }
-
     private static OrganizationFailure ToOrganizationFailure(OrganizationAccessStatus status)
     {
         return status switch
@@ -461,36 +439,6 @@ public sealed class OrganizationService(
             _ => OrganizationFailure.None
         };
     }
-
-    private static bool TryParseRole(string? value, out OrganizationRole role)
-    {
-        role = default;
-        var trimmed = value?.Trim();
-
-        return !string.IsNullOrWhiteSpace(trimmed) &&
-            RoleNames.Any(roleName => string.Equals(roleName, trimmed, StringComparison.OrdinalIgnoreCase)) &&
-            Enum.TryParse(trimmed, ignoreCase: true, out role);
-    }
-
-    private static bool IsValidSlug(string slug)
-    {
-        if (slug.Length == 0 || slug.Length > MaxSlugLength)
-        {
-            return false;
-        }
-
-        if (!char.IsLetterOrDigit(slug[0]) || !char.IsLetterOrDigit(slug[^1]))
-        {
-            return false;
-        }
-
-        return slug.All(character =>
-            character is '-' ||
-            character is >= 'a' and <= 'z' ||
-            character is >= '0' and <= '9');
-    }
-
-    private static string NormalizeSlug(string slug) => slug.Trim().ToLowerInvariant();
 
     private static ServiceResult<T, OrganizationFailure> Success<T>(T value) =>
         ServiceResult<T, OrganizationFailure>.Success(value, OrganizationFailure.None);

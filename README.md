@@ -8,6 +8,7 @@
 |--------|--------|
 | Runtime | [.NET 10](https://dotnet.microsoft.com/) (SDK pinned via `global.json`) |
 | API | ASP.NET Core (minimal APIs) |
+| Validation | FluentValidation |
 | Data | Entity Framework Core, Npgsql |
 | Database | PostgreSQL 17 (local via Docker Compose) |
 | API docs | OpenAPI + Swagger UI (Development) |

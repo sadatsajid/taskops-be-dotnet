@@ -1,3 +1,4 @@
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using TaskOps.Api.Persistence;
 using TaskOps.Api.Persistence.Entities;
@@ -8,7 +9,12 @@ namespace TaskOps.Api.Features.Issues;
 
 public sealed class IssueService(
     TaskOpsDbContext dbContext,
-    IOrganizationAccessService organizationAccess) : IIssueService
+    IOrganizationAccessService organizationAccess,
+    IValidator<IssueListQuery> issueListQueryValidator,
+    IValidator<CreateIssueRequest> createIssueValidator,
+    IValidator<UpdateIssueRequest> updateIssueValidator,
+    IValidator<ChangeIssueStatusRequest> changeStatusValidator,
+    IValidator<ChangeIssuePriorityRequest> changePriorityValidator) : IIssueService
 {
     private static readonly OrganizationRole[] IssueManagers =
     [
@@ -16,10 +22,6 @@ public sealed class IssueService(
         OrganizationRole.Admin,
         OrganizationRole.ProjectManager
     ];
-
-    private const int MaxTitleLength = 240;
-    private const int MaxDescriptionLength = 8000;
-    private const int MaxSearchLength = 120;
 
     public async Task<ServiceResult<PagedResponse<IssueListItemResponse>, IssueFailure>> ListIssuesAsync(
         Guid organizationId,
@@ -32,16 +34,23 @@ public sealed class IssueService(
             return Failure<PagedResponse<IssueListItemResponse>>(ToIssueFailure(access.Status));
         }
 
-        var errors = ValidateListQuery(query, out var status, out var priority, out var sort);
-        if (errors.Count > 0)
+        var validation = await issueListQueryValidator.ValidateAsync(query, cancellationToken);
+        if (!validation.IsValid)
         {
-            return Validation<PagedResponse<IssueListItemResponse>>(errors);
+            return Validation<PagedResponse<IssueListItemResponse>>(validation.ToErrorDictionary());
         }
 
+        var status = IssueValidation.TryParseNamedEnum<IssueStatus>(query.Status, out var parsedStatus)
+            ? parsedStatus
+            : (IssueStatus?)null;
+        var priority = IssueValidation.TryParseNamedEnum<IssuePriority>(query.Priority, out var parsedPriority)
+            ? parsedPriority
+            : (IssuePriority?)null;
+        _ = TryParseSort(query.Sort, out var sort);
         var page = new PageRequest(query.Offset, query.Limit);
         var limit = page.SafeLimit;
         var offset = page.SafeOffset;
-        var search = NormalizeOptional(query.Search);
+        var search = IssueValidation.NormalizeOptional(query.Search);
 
         var issuesQuery = dbContext.Issues
             .AsNoTracking()
@@ -141,13 +150,13 @@ public sealed class IssueService(
             return Failure<IssueResponse>(access);
         }
 
-        var errors = ValidateIssueDetails(request.Title, request.Description);
-        var priority = ParseRequiredPriority(request.Priority, errors);
-        if (errors.Count > 0)
+        var validation = await createIssueValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
         {
-            return Validation<IssueResponse>(errors);
+            return Validation<IssueResponse>(validation.ToErrorDictionary());
         }
 
+        _ = IssueValidation.TryParseNamedEnum<IssuePriority>(request.Priority, out var priority);
         Guid issueId;
         await using (var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken))
         {
@@ -180,7 +189,7 @@ public sealed class IssueService(
                 ProjectId = project.Id,
                 Number = nextNumber,
                 Title = request.Title!.Trim(),
-                Description = NormalizeOptional(request.Description),
+                Description = IssueValidation.NormalizeOptional(request.Description),
                 Status = IssueStatus.Todo,
                 Priority = priority,
                 AssigneeId = request.AssigneeId,
@@ -230,10 +239,10 @@ public sealed class IssueService(
             return Failure<IssueResponse>(access);
         }
 
-        var errors = ValidateIssueDetails(request.Title, request.Description);
-        if (errors.Count > 0)
+        var validation = await updateIssueValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
         {
-            return Validation<IssueResponse>(errors);
+            return Validation<IssueResponse>(validation.ToErrorDictionary());
         }
 
         var issue = await dbContext.Issues.FirstOrDefaultAsync(
@@ -245,7 +254,7 @@ public sealed class IssueService(
         }
 
         issue.Title = request.Title!.Trim();
-        issue.Description = NormalizeOptional(request.Description);
+        issue.Description = IssueValidation.NormalizeOptional(request.Description);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -295,13 +304,13 @@ public sealed class IssueService(
             return Failure<IssueResponse>(ToIssueFailure(access.Status));
         }
 
-        var errors = new Dictionary<string, string[]>();
-        var status = ParseRequiredStatus(request.Status, errors);
-        if (errors.Count > 0)
+        var validation = await changeStatusValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
         {
-            return Validation<IssueResponse>(errors);
+            return Validation<IssueResponse>(validation.ToErrorDictionary());
         }
 
+        _ = IssueValidation.TryParseNamedEnum<IssueStatus>(request.Status, out var status);
         var issue = await dbContext.Issues.FirstOrDefaultAsync(
             issue => issue.OrganizationId == organizationId && issue.Id == issueId,
             cancellationToken);
@@ -333,13 +342,13 @@ public sealed class IssueService(
             return Failure<IssueResponse>(access);
         }
 
-        var errors = new Dictionary<string, string[]>();
-        var priority = ParseRequiredPriority(request.Priority, errors);
-        if (errors.Count > 0)
+        var validation = await changePriorityValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid)
         {
-            return Validation<IssueResponse>(errors);
+            return Validation<IssueResponse>(validation.ToErrorDictionary());
         }
 
+        _ = IssueValidation.TryParseNamedEnum<IssuePriority>(request.Priority, out var priority);
         var issue = await dbContext.Issues.FirstOrDefaultAsync(
             issue => issue.OrganizationId == organizationId && issue.Id == issueId,
             cancellationToken);
@@ -438,115 +447,10 @@ public sealed class IssueService(
         return (currentMax ?? 0) + 1;
     }
 
-    private static Dictionary<string, string[]> ValidateIssueDetails(string? title, string? description)
-    {
-        var errors = new Dictionary<string, string[]>();
-        var trimmedTitle = title?.Trim() ?? string.Empty;
-        var trimmedDescription = description?.Trim();
-
-        if (trimmedTitle.Length == 0 || trimmedTitle.Length > MaxTitleLength)
-        {
-            errors["title"] = [$"Title must be between 1 and {MaxTitleLength} characters."];
-        }
-
-        if (trimmedDescription?.Length > MaxDescriptionLength)
-        {
-            errors["description"] = [$"Description must be {MaxDescriptionLength} characters or fewer."];
-        }
-
-        return errors;
-    }
-
-    private static Dictionary<string, string[]> ValidateListQuery(
-        IssueListQuery query,
-        out IssueStatus? status,
-        out IssuePriority? priority,
-        out IssueSort sort)
-    {
-        var errors = new Dictionary<string, string[]>();
-        status = null;
-        priority = null;
-
-        if (!string.IsNullOrWhiteSpace(query.Status) && TryParseNamedEnum<IssueStatus>(query.Status, out var parsedStatus))
-        {
-            status = parsedStatus;
-        }
-        else if (!string.IsNullOrWhiteSpace(query.Status))
-        {
-            errors["status"] = ["Status must be one of: Todo, InProgress, InReview, Done."];
-        }
-
-        if (!string.IsNullOrWhiteSpace(query.Priority) && TryParseNamedEnum<IssuePriority>(query.Priority, out var parsedPriority))
-        {
-            priority = parsedPriority;
-        }
-        else if (!string.IsNullOrWhiteSpace(query.Priority))
-        {
-            errors["priority"] = ["Priority must be one of: Low, Medium, High, Critical."];
-        }
-
-        if (query.CreatedFrom is { } createdFrom && query.CreatedTo is { } createdTo && createdFrom > createdTo)
-        {
-            errors["createdFrom"] = ["CreatedFrom must be on or before CreatedTo."];
-        }
-
-        if (query.DueFrom is { } dueFrom && query.DueTo is { } dueTo && dueFrom > dueTo)
-        {
-            errors["dueFrom"] = ["DueFrom must be on or before DueTo."];
-        }
-
-        if (NormalizeOptional(query.Search)?.Length > MaxSearchLength)
-        {
-            errors["search"] = [$"Search must be {MaxSearchLength} characters or fewer."];
-        }
-
-        if (!TryParseSort(query.Sort, out sort))
-        {
-            errors["sort"] = ["Sort must be one of: createdAt, dueDate, priority, status, title, number, or the same value prefixed with '-'."];
-        }
-
-        return errors;
-    }
-
-    private static IssueStatus ParseRequiredStatus(string? value, Dictionary<string, string[]> errors)
-    {
-        if (TryParseNamedEnum<IssueStatus>(value, out var status))
-        {
-            return status;
-        }
-
-        errors["status"] = ["Status must be one of: Todo, InProgress, InReview, Done."];
-        return IssueStatus.Todo;
-    }
-
-    private static IssuePriority ParseRequiredPriority(string? value, Dictionary<string, string[]> errors)
-    {
-        if (TryParseNamedEnum<IssuePriority>(value, out var priority))
-        {
-            return priority;
-        }
-
-        errors["priority"] = ["Priority must be one of: Low, Medium, High, Critical."];
-        return IssuePriority.Medium;
-    }
-
-    private static bool TryParseNamedEnum<TEnum>(string? value, out TEnum result)
-        where TEnum : struct, Enum
-    {
-        result = default;
-        var trimmed = value?.Trim();
-        if (string.IsNullOrWhiteSpace(trimmed) || trimmed.All(char.IsDigit))
-        {
-            return false;
-        }
-
-        return Enum.TryParse(trimmed, ignoreCase: true, out result) && Enum.IsDefined(result);
-    }
-
     private static bool TryParseSort(string? value, out IssueSort sort)
     {
         sort = IssueSort.CreatedAtDescending;
-        var normalized = NormalizeOptional(value);
+        var normalized = IssueValidation.NormalizeOptional(value);
         if (normalized is null)
         {
             return true;
@@ -631,12 +535,6 @@ public sealed class IssueService(
 
     private static bool CanAssignedDeveloperChangeStatus(OrganizationMember membership, Guid? assigneeId) =>
         membership.Role == OrganizationRole.Developer && assigneeId == membership.Id;
-
-    private static string? NormalizeOptional(string? value)
-    {
-        var trimmed = value?.Trim();
-        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
-    }
 
     private static DateTimeOffset ToUtcStart(DateOnly date) =>
         new(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
