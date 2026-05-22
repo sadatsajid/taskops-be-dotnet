@@ -8,6 +8,6 @@ public interface IOrganizationAccessService
 
     Task<OrganizationAccessResult> RequireAnyRoleAsync(
         Guid organizationId,
-        OrganizationRole[] roles,
+        IReadOnlyCollection<OrganizationRole> roles,
         CancellationToken cancellationToken);
 }

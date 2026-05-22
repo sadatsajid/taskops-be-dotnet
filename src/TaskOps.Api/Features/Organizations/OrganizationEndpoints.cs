@@ -44,7 +44,7 @@ public static class OrganizationEndpoints
         CancellationToken cancellationToken)
     {
         var result = await organizationService.ListOrganizationsAsync(page, cancellationToken);
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, OrganizationFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> CreateOrganizationAsync(
@@ -55,9 +55,12 @@ public static class OrganizationEndpoints
     {
         var result = await organizationService.CreateOrganizationAsync(request, cancellationToken);
 
-        return result.IsSuccess(OrganizationFailure.None)
-            ? EndpointResults.Created($"/api/organizations/{result.Value!.Id}", result.Value, httpContext)
-            : ToFailureResult(result);
+        return EndpointResults.CreatedOrFailure(
+            result,
+            OrganizationFailure.None,
+            organization => $"/api/organizations/{organization.Id}",
+            httpContext,
+            ToFailureResult);
     }
 
     private static async Task<IResult> GetOrganizationAsync(
@@ -67,7 +70,7 @@ public static class OrganizationEndpoints
         CancellationToken cancellationToken)
     {
         var result = await organizationService.GetOrganizationAsync(organizationId, cancellationToken);
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, OrganizationFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> UpdateOrganizationAsync(
@@ -78,7 +81,7 @@ public static class OrganizationEndpoints
         CancellationToken cancellationToken)
     {
         var result = await organizationService.UpdateOrganizationAsync(organizationId, request, cancellationToken);
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, OrganizationFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> ListMembersAsync(
@@ -89,7 +92,7 @@ public static class OrganizationEndpoints
         CancellationToken cancellationToken)
     {
         var result = await organizationService.ListMembersAsync(organizationId, page, cancellationToken);
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, OrganizationFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> AddMemberAsync(
@@ -101,9 +104,12 @@ public static class OrganizationEndpoints
     {
         var result = await organizationService.AddMemberAsync(organizationId, request, cancellationToken);
 
-        return result.IsSuccess(OrganizationFailure.None)
-            ? EndpointResults.Created($"/api/organizations/{organizationId}/members/{result.Value!.Id}", result.Value, httpContext)
-            : ToFailureResult(result);
+        return EndpointResults.CreatedOrFailure(
+            result,
+            OrganizationFailure.None,
+            member => $"/api/organizations/{organizationId}/members/{member.Id}",
+            httpContext,
+            ToFailureResult);
     }
 
     private static async Task<IResult> ChangeMemberRoleAsync(
@@ -115,7 +121,7 @@ public static class OrganizationEndpoints
         CancellationToken cancellationToken)
     {
         var result = await organizationService.ChangeMemberRoleAsync(organizationId, memberId, request, cancellationToken);
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, OrganizationFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> RemoveMemberAsync(
@@ -126,16 +132,7 @@ public static class OrganizationEndpoints
     {
         var result = await organizationService.RemoveMemberAsync(organizationId, memberId, cancellationToken);
 
-        return result.Failure == OrganizationFailure.None
-            ? Results.NoContent()
-            : ToFailureResult(result);
-    }
-
-    private static IResult ToOkResult<T>(ServiceResult<T, OrganizationFailure> result, HttpContext httpContext)
-    {
-        return result.IsSuccess(OrganizationFailure.None)
-            ? EndpointResults.Ok(result.Value!, httpContext)
-            : ToFailureResult(result);
+        return EndpointResults.NoContentOrFailure(result, OrganizationFailure.None, ToFailureResult);
     }
 
     private static IResult ToFailureResult<T>(ServiceResult<T, OrganizationFailure> result)
@@ -143,29 +140,23 @@ public static class OrganizationEndpoints
         return result.Failure switch
         {
             OrganizationFailure.Validation => EndpointResults.ValidationProblem(result.Errors),
-            OrganizationFailure.Unauthorized => Results.Unauthorized(),
-            OrganizationFailure.Forbidden => Results.Problem(
-                title: "Forbidden.",
-                detail: "The current user does not have the required organization role.",
-                statusCode: StatusCodes.Status403Forbidden),
-            OrganizationFailure.NotFound => Results.NotFound(),
-            OrganizationFailure.DuplicateSlug => Results.Problem(
-                title: "Duplicate organization slug.",
-                detail: "An organization with this slug already exists.",
-                statusCode: StatusCodes.Status409Conflict),
-            OrganizationFailure.UserNotFound => Results.Problem(
-                title: "User not found.",
-                detail: "No user exists with the supplied email.",
-                statusCode: StatusCodes.Status404NotFound),
-            OrganizationFailure.DuplicateMember => Results.Problem(
-                title: "Duplicate organization member.",
-                detail: "This user is already a member of the organization.",
-                statusCode: StatusCodes.Status409Conflict),
-            OrganizationFailure.CannotRemoveLastOwner => Results.Problem(
-                title: "Organization must have an owner.",
-                detail: "The last organization owner cannot be removed or assigned another role.",
-                statusCode: StatusCodes.Status409Conflict),
-            _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError)
+            OrganizationFailure.Unauthorized => EndpointResults.Unauthorized(),
+            OrganizationFailure.Forbidden => EndpointResults.ForbiddenProblem(
+                "The current user does not have the required organization role."),
+            OrganizationFailure.NotFound => EndpointResults.NotFound(),
+            OrganizationFailure.DuplicateSlug => EndpointResults.ConflictProblem(
+                "Duplicate organization slug.",
+                "An organization with this slug already exists."),
+            OrganizationFailure.UserNotFound => EndpointResults.NotFoundProblem(
+                "User not found.",
+                "No user exists with the supplied email."),
+            OrganizationFailure.DuplicateMember => EndpointResults.ConflictProblem(
+                "Duplicate organization member.",
+                "This user is already a member of the organization."),
+            OrganizationFailure.CannotRemoveLastOwner => EndpointResults.ConflictProblem(
+                "Organization must have an owner.",
+                "The last organization owner cannot be removed or assigned another role."),
+            _ => EndpointResults.InternalServerError()
         };
     }
 }

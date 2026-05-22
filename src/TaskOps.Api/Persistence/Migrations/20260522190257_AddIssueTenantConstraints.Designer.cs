@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TaskOps.Api.Persistence;
@@ -11,9 +12,11 @@ using TaskOps.Api.Persistence;
 namespace TaskOps.Api.Persistence.Migrations
 {
     [DbContext(typeof(TaskOpsDbContext))]
-    partial class TaskOpsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260522190257_AddIssueTenantConstraints")]
+    partial class AddIssueTenantConstraints
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

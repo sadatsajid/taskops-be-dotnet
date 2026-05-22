@@ -15,12 +15,7 @@ public sealed class ProjectService(
     IValidator<UpdateProjectRequest> updateProjectValidator) : IProjectService
 {
     private static readonly object Empty = new();
-    private static readonly OrganizationRole[] ProjectManagers =
-    [
-        OrganizationRole.Owner,
-        OrganizationRole.Admin,
-        OrganizationRole.ProjectManager
-    ];
+
     public async Task<ServiceResult<PagedResponse<ProjectListItemResponse>, ProjectFailure>> ListProjectsAsync(
         Guid organizationId,
         PageRequest page,
@@ -219,7 +214,10 @@ public sealed class ProjectService(
 
     private async Task<ProjectFailure> RequireProjectManagerAsync(Guid organizationId, CancellationToken cancellationToken)
     {
-        var access = await organizationAccess.RequireAnyRoleAsync(organizationId, ProjectManagers, cancellationToken);
+        var access = await organizationAccess.RequireAnyRoleAsync(
+            organizationId,
+            OrganizationRolePolicies.ProjectManagement,
+            cancellationToken);
         return access.IsAllowed ? ProjectFailure.None : ToProjectFailure(access.Status);
     }
 

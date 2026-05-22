@@ -12,6 +12,7 @@ public sealed class OrganizationMemberConfiguration : IEntityTypeConfiguration<O
         entity.Property(member => member.Role).HasConversion<string>().HasMaxLength(40).IsRequired();
         entity.Property(member => member.JoinedAt).IsRequired();
 
+        entity.HasAlternateKey(member => new { member.Id, member.OrganizationId });
         entity.HasIndex(member => new { member.OrganizationId, member.UserId }).IsUnique();
 
         entity.HasOne(member => member.Organization)
