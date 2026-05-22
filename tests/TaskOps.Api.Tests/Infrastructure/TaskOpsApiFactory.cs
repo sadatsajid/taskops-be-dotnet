@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using TaskOps.Api.Persistence;
+using TaskOps.Infrastructure.Persistence;
 using Testcontainers.PostgreSql;
 
 namespace TaskOps.Api.Tests.Infrastructure;

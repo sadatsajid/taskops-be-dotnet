@@ -78,7 +78,7 @@ Add a migration:
 
 ```bash
 dotnet tool run dotnet-ef migrations add MigrationName \
-  --project src/TaskOps.Api/TaskOps.Api.csproj \
+  --project src/TaskOps.Infrastructure/TaskOps.Infrastructure.csproj \
   --startup-project src/TaskOps.Api/TaskOps.Api.csproj \
   --output-dir Persistence/Migrations
 ```
@@ -87,7 +87,7 @@ Apply migrations manually:
 
 ```bash
 dotnet tool run dotnet-ef database update \
-  --project src/TaskOps.Api/TaskOps.Api.csproj \
+  --project src/TaskOps.Infrastructure/TaskOps.Infrastructure.csproj \
   --startup-project src/TaskOps.Api/TaskOps.Api.csproj
 ```
 
@@ -95,6 +95,7 @@ Current migrations:
 
 - `20260520083630_InitialCreate`
 - `20260520100819_AddRefreshTokens`
+- `20260522190257_AddIssueTenantConstraints`
 
 ## Inspect Seed Data
 

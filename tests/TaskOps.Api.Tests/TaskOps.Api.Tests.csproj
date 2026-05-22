@@ -24,6 +24,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\TaskOps.Api\TaskOps.Api.csproj" />
+    <ProjectReference Include="..\..\src\TaskOps.Application\TaskOps.Application.csproj" />
+    <ProjectReference Include="..\..\src\TaskOps.Domain\TaskOps.Domain.csproj" />
+    <ProjectReference Include="..\..\src\TaskOps.Infrastructure\TaskOps.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
