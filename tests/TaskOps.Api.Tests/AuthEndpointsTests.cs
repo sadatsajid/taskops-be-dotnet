@@ -66,6 +66,23 @@ public sealed class AuthEndpointsTests(TaskOpsApiFactory factory) : IntegrationT
     }
 
     [Fact]
+    public async Task Refresh_ReusingRotatedRefreshTokenRevokesReplacement()
+    {
+        var email = $"refresh-reuse-{Guid.NewGuid():N}@example.com";
+        var registered = await _client.RegisterAsync(email, "Auth Test");
+
+        var refreshResponse = await _client.PostAsJsonAsync("/api/auth/refresh", new RefreshTokenRequest(registered.RefreshToken));
+        refreshResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var refreshed = await refreshResponse.Content.ReadFromJsonAsync<ApiResponseEnvelope<AuthResponse>>();
+
+        var reuseResponse = await _client.PostAsJsonAsync("/api/auth/refresh", new RefreshTokenRequest(registered.RefreshToken));
+        reuseResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var replacementResponse = await _client.PostAsJsonAsync("/api/auth/refresh", new RefreshTokenRequest(refreshed!.Data.RefreshToken));
+        replacementResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task Refresh_AllowsOnlyOneConcurrentRotation()
     {
         var email = $"refresh-concurrent-{Guid.NewGuid():N}@example.com";
@@ -94,6 +111,36 @@ public sealed class AuthEndpointsTests(TaskOpsApiFactory factory) : IntegrationT
 
         var refreshResponse = await _client.PostAsJsonAsync("/api/auth/refresh", new RefreshTokenRequest(registered.RefreshToken));
         refreshResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Logout_DoesNotRequireAccessTokenAndRevokesRefreshToken()
+    {
+        var email = $"logout-no-access-token-{Guid.NewGuid():N}@example.com";
+        var registered = await _client.RegisterAsync(email, "Auth Test");
+
+        var logoutResponse = await _client.PostAsJsonAsync("/api/auth/logout", new LogoutRequest(registered.RefreshToken));
+        logoutResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var refreshResponse = await _client.PostAsJsonAsync("/api/auth/refresh", new RefreshTokenRequest(registered.RefreshToken));
+        refreshResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Logout_WithRotatedRefreshTokenRevokesReplacement()
+    {
+        var email = $"logout-rotated-{Guid.NewGuid():N}@example.com";
+        var registered = await _client.RegisterAsync(email, "Auth Test");
+
+        var refreshResponse = await _client.PostAsJsonAsync("/api/auth/refresh", new RefreshTokenRequest(registered.RefreshToken));
+        refreshResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var refreshed = await refreshResponse.Content.ReadFromJsonAsync<ApiResponseEnvelope<AuthResponse>>();
+
+        var logoutResponse = await _client.PostAsJsonAsync("/api/auth/logout", new LogoutRequest(registered.RefreshToken));
+        logoutResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var replacementResponse = await _client.PostAsJsonAsync("/api/auth/refresh", new RefreshTokenRequest(refreshed!.Data.RefreshToken));
+        replacementResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]

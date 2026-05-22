@@ -30,7 +30,7 @@ public sealed class OrganizationAccessService(
 
     public async Task<OrganizationAccessResult> RequireAnyRoleAsync(
         Guid organizationId,
-        OrganizationRole[] roles,
+        IReadOnlyCollection<OrganizationRole> roles,
         CancellationToken cancellationToken)
     {
         var access = await RequireMembershipAsync(organizationId, cancellationToken);
@@ -39,7 +39,7 @@ public sealed class OrganizationAccessService(
             return access;
         }
 
-        return roles.Contains(access.Membership!.Role)
+        return OrganizationRolePolicies.Allows(roles, access.Membership!.Role)
             ? access
             : OrganizationAccessResult.Forbidden(access.Membership);
     }

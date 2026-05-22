@@ -71,7 +71,7 @@ public static class IssueEndpoints
             Sort = sort
         };
         var result = await issueService.ListIssuesAsync(organizationId, query, cancellationToken);
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, IssueFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> CreateIssueAsync(
@@ -83,9 +83,12 @@ public static class IssueEndpoints
     {
         var result = await issueService.CreateIssueAsync(organizationId, request, cancellationToken);
 
-        return result.IsSuccess(IssueFailure.None)
-            ? EndpointResults.Created($"/api/organizations/{organizationId}/issues/{result.Value!.Id}", result.Value, httpContext)
-            : ToFailureResult(result);
+        return EndpointResults.CreatedOrFailure(
+            result,
+            IssueFailure.None,
+            issue => $"/api/organizations/{organizationId}/issues/{issue.Id}",
+            httpContext,
+            ToFailureResult);
     }
 
     private static async Task<IResult> GetIssueAsync(
@@ -96,7 +99,7 @@ public static class IssueEndpoints
         CancellationToken cancellationToken)
     {
         var result = await issueService.GetIssueAsync(organizationId, issueId, cancellationToken);
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, IssueFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> UpdateIssueAsync(
@@ -108,7 +111,7 @@ public static class IssueEndpoints
         CancellationToken cancellationToken)
     {
         var result = await issueService.UpdateIssueAsync(organizationId, issueId, request, cancellationToken);
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, IssueFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> AssignIssueAsync(
@@ -120,7 +123,7 @@ public static class IssueEndpoints
         CancellationToken cancellationToken)
     {
         var result = await issueService.AssignIssueAsync(organizationId, issueId, request, cancellationToken);
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, IssueFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> ChangeStatusAsync(
@@ -132,7 +135,7 @@ public static class IssueEndpoints
         CancellationToken cancellationToken)
     {
         var result = await issueService.ChangeStatusAsync(organizationId, issueId, request, cancellationToken);
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, IssueFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> ChangePriorityAsync(
@@ -144,7 +147,7 @@ public static class IssueEndpoints
         CancellationToken cancellationToken)
     {
         var result = await issueService.ChangePriorityAsync(organizationId, issueId, request, cancellationToken);
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, IssueFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> SetDueDateAsync(
@@ -156,14 +159,7 @@ public static class IssueEndpoints
         CancellationToken cancellationToken)
     {
         var result = await issueService.SetDueDateAsync(organizationId, issueId, request, cancellationToken);
-        return ToOkResult(result, httpContext);
-    }
-
-    private static IResult ToOkResult<T>(ServiceResult<T, IssueFailure> result, HttpContext httpContext)
-    {
-        return result.IsSuccess(IssueFailure.None)
-            ? EndpointResults.Ok(result.Value!, httpContext)
-            : ToFailureResult(result);
+        return EndpointResults.OkOrFailure(result, IssueFailure.None, httpContext, ToFailureResult);
     }
 
     private static IResult ToFailureResult<T>(ServiceResult<T, IssueFailure> result)
@@ -171,25 +167,20 @@ public static class IssueEndpoints
         return result.Failure switch
         {
             IssueFailure.Validation => EndpointResults.ValidationProblem(result.Errors),
-            IssueFailure.Unauthorized => Results.Unauthorized(),
-            IssueFailure.Forbidden => Results.Problem(
-                title: "Forbidden.",
-                detail: "The current user does not have permission to modify this issue.",
-                statusCode: StatusCodes.Status403Forbidden),
-            IssueFailure.NotFound => Results.NotFound(),
-            IssueFailure.ProjectNotFound => Results.Problem(
-                title: "Project not found.",
-                detail: "The issue project does not exist in this organization.",
-                statusCode: StatusCodes.Status404NotFound),
-            IssueFailure.AssigneeNotOrganizationMember => Results.Problem(
-                title: "Invalid assignee.",
-                detail: "The assignee must be a member of the issue organization.",
-                statusCode: StatusCodes.Status400BadRequest),
-            IssueFailure.IssueNumberConflict => Results.Problem(
-                title: "Issue number conflict.",
-                detail: "A concurrent issue creation used the next issue number. Retry the request.",
-                statusCode: StatusCodes.Status409Conflict),
-            _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError)
+            IssueFailure.Unauthorized => EndpointResults.Unauthorized(),
+            IssueFailure.Forbidden => EndpointResults.ForbiddenProblem(
+                "The current user does not have permission to modify this issue."),
+            IssueFailure.NotFound => EndpointResults.NotFound(),
+            IssueFailure.ProjectNotFound => EndpointResults.NotFoundProblem(
+                "Project not found.",
+                "The issue project does not exist in this organization."),
+            IssueFailure.AssigneeNotOrganizationMember => EndpointResults.BadRequestProblem(
+                "Invalid assignee.",
+                "The assignee must be a member of the issue organization."),
+            IssueFailure.IssueNumberConflict => EndpointResults.ConflictProblem(
+                "Issue number conflict.",
+                "A concurrent issue creation used the next issue number. Retry the request."),
+            _ => EndpointResults.InternalServerError()
         };
     }
 }

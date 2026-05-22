@@ -19,7 +19,6 @@ public static class AuthEndpoints
             .WithName("RefreshToken");
 
         group.MapPost("/logout", LogoutAsync)
-            .RequireAuthorization()
             .WithName("Logout");
 
         group.MapGet("/me", GetCurrentUserAsync)
@@ -37,9 +36,12 @@ public static class AuthEndpoints
     {
         var result = await authService.RegisterAsync(request, cancellationToken);
 
-        return result.IsSuccess(AuthFailure.None)
-            ? EndpointResults.Created($"/api/auth/users/{result.Value!.CurrentUser.Id}", result.Value, httpContext)
-            : ToFailureResult(result);
+        return EndpointResults.CreatedOrFailure(
+            result,
+            AuthFailure.None,
+            auth => $"/api/auth/users/{auth.CurrentUser.Id}",
+            httpContext,
+            ToFailureResult);
     }
 
     private static async Task<IResult> LoginAsync(
@@ -50,7 +52,7 @@ public static class AuthEndpoints
     {
         var result = await authService.LoginAsync(request, cancellationToken);
 
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, AuthFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> RefreshAsync(
@@ -61,7 +63,7 @@ public static class AuthEndpoints
     {
         var result = await authService.RefreshAsync(request, cancellationToken);
 
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, AuthFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> LogoutAsync(
@@ -71,9 +73,7 @@ public static class AuthEndpoints
     {
         var result = await authService.LogoutAsync(request, cancellationToken);
 
-        return result.Failure == AuthFailure.None
-            ? Results.NoContent()
-            : ToFailureResult(result);
+        return EndpointResults.NoContentOrFailure(result, AuthFailure.None, ToFailureResult);
     }
 
     private static async Task<IResult> GetCurrentUserAsync(
@@ -83,14 +83,7 @@ public static class AuthEndpoints
     {
         var result = await authService.GetCurrentUserAsync(cancellationToken);
 
-        return ToOkResult(result, httpContext);
-    }
-
-    private static IResult ToOkResult<T>(ServiceResult<T, AuthFailure> result, HttpContext httpContext)
-    {
-        return result.IsSuccess(AuthFailure.None)
-            ? EndpointResults.Ok(result.Value!, httpContext)
-            : ToFailureResult(result);
+        return EndpointResults.OkOrFailure(result, AuthFailure.None, httpContext, ToFailureResult);
     }
 
     private static IResult ToFailureResult<T>(ServiceResult<T, AuthFailure> result)
@@ -98,16 +91,13 @@ public static class AuthEndpoints
         return result.Failure switch
         {
             AuthFailure.Validation => EndpointResults.ValidationProblem(result.Errors),
-            AuthFailure.DuplicateEmail => Results.Problem(
-                title: "Duplicate email.",
-                detail: "A user with this email already exists.",
-                statusCode: StatusCodes.Status409Conflict),
-            AuthFailure.InvalidCredentials => Results.Problem(
-                title: "Invalid credentials.",
-                statusCode: StatusCodes.Status401Unauthorized),
-            AuthFailure.Unauthorized => Results.Unauthorized(),
-            AuthFailure.NotFound => Results.NotFound(),
-            _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError)
+            AuthFailure.DuplicateEmail => EndpointResults.ConflictProblem(
+                "Duplicate email.",
+                "A user with this email already exists."),
+            AuthFailure.InvalidCredentials => EndpointResults.UnauthorizedProblem("Invalid credentials."),
+            AuthFailure.Unauthorized => EndpointResults.Unauthorized(),
+            AuthFailure.NotFound => EndpointResults.NotFound(),
+            _ => EndpointResults.InternalServerError()
         };
     }
 }

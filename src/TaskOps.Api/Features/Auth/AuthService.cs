@@ -112,9 +112,21 @@ public sealed class AuthService(
             .Include(refreshToken => refreshToken.User)
             .FirstOrDefaultAsync(refreshToken => refreshToken.TokenHash == refreshTokenHash, cancellationToken);
 
-        if (existingRefreshToken is null ||
-            existingRefreshToken.RevokedAt is not null ||
-            existingRefreshToken.ExpiresAt <= now)
+        if (existingRefreshToken is null)
+        {
+            return ServiceResult<AuthResponse, AuthFailure>.Failed(AuthFailure.Unauthorized);
+        }
+
+        if (existingRefreshToken.RevokedAt is not null)
+        {
+            await RevokeDescendantRefreshTokensAsync(existingRefreshToken.UserId, existingRefreshToken.ReplacedByTokenHash, now, cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return ServiceResult<AuthResponse, AuthFailure>.Failed(AuthFailure.Unauthorized);
+        }
+
+        if (existingRefreshToken.ExpiresAt <= now)
         {
             return ServiceResult<AuthResponse, AuthFailure>.Failed(AuthFailure.Unauthorized);
         }
@@ -149,11 +161,6 @@ public sealed class AuthService(
         LogoutRequest request,
         CancellationToken cancellationToken)
     {
-        if (currentUser.UserId is not { } userId)
-        {
-            return ServiceResult<object, AuthFailure>.Failed(AuthFailure.Unauthorized);
-        }
-
         var validation = await logoutValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
@@ -161,14 +168,24 @@ public sealed class AuthService(
         }
 
         var refreshTokenHash = tokenService.HashRefreshToken(request.RefreshToken);
+        var now = timeProvider.GetUtcNow();
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
         var refreshToken = await dbContext.RefreshTokens.FirstOrDefaultAsync(
-            token => token.UserId == userId && token.TokenHash == refreshTokenHash,
+            token => token.TokenHash == refreshTokenHash,
             cancellationToken);
 
-        if (refreshToken is { RevokedAt: null })
+        if (refreshToken is not null)
         {
-            refreshToken.RevokedAt = timeProvider.GetUtcNow();
+            if (refreshToken.RevokedAt is null)
+            {
+                refreshToken.RevokedAt = now;
+            }
+
+            await RevokeDescendantRefreshTokensAsync(refreshToken.UserId, refreshToken.ReplacedByTokenHash, now, cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
         }
 
         return ServiceResult<object, AuthFailure>.Success(Empty, AuthFailure.None);
@@ -211,6 +228,33 @@ public sealed class AuthService(
             TokenHash = refreshToken.TokenHash,
             ExpiresAt = refreshToken.ExpiresAt
         });
+    }
+
+    private async Task RevokeDescendantRefreshTokensAsync(
+        Guid userId,
+        string? replacedByTokenHash,
+        DateTimeOffset revokedAt,
+        CancellationToken cancellationToken)
+    {
+        var nextTokenHash = replacedByTokenHash;
+
+        while (!string.IsNullOrWhiteSpace(nextTokenHash))
+        {
+            var descendantToken = await dbContext.RefreshTokens.FirstOrDefaultAsync(
+                token => token.UserId == userId && token.TokenHash == nextTokenHash,
+                cancellationToken);
+            if (descendantToken is null)
+            {
+                return;
+            }
+
+            if (descendantToken.RevokedAt is null)
+            {
+                descendantToken.RevokedAt = revokedAt;
+            }
+
+            nextTokenHash = descendantToken.ReplacedByTokenHash;
+        }
     }
 
     private static AuthResponse ToAuthResponse(User user, AccessTokenResult accessToken, RefreshTokenResult refreshToken)

@@ -19,7 +19,6 @@ public sealed class OrganizationService(
     IValidator<ChangeOrganizationMemberRoleRequest> changeMemberRoleValidator) : IOrganizationService
 {
     private static readonly object Empty = new();
-    private static readonly OrganizationRole[] OwnerOnly = [OrganizationRole.Owner];
 
     public async Task<ServiceResult<PagedResponse<OrganizationListItemResponse>, OrganizationFailure>> ListOrganizationsAsync(
         PageRequest page,
@@ -416,7 +415,10 @@ public sealed class OrganizationService(
 
     private async Task<OrganizationFailure> RequireOwnerAsync(Guid organizationId, CancellationToken cancellationToken)
     {
-        var access = await organizationAccess.RequireAnyRoleAsync(organizationId, OwnerOnly, cancellationToken);
+        var access = await organizationAccess.RequireAnyRoleAsync(
+            organizationId,
+            OrganizationRolePolicies.OwnerOnly,
+            cancellationToken);
         return access.IsAllowed ? OrganizationFailure.None : ToOrganizationFailure(access.Status);
     }
 

@@ -37,7 +37,7 @@ public static class ProjectEndpoints
         CancellationToken cancellationToken)
     {
         var result = await projectService.ListProjectsAsync(organizationId, page, includeArchived ?? false, cancellationToken);
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, ProjectFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> CreateProjectAsync(
@@ -49,9 +49,12 @@ public static class ProjectEndpoints
     {
         var result = await projectService.CreateProjectAsync(organizationId, request, cancellationToken);
 
-        return result.IsSuccess(ProjectFailure.None)
-            ? EndpointResults.Created($"/api/organizations/{organizationId}/projects/{result.Value!.Id}", result.Value, httpContext)
-            : ToFailureResult(result);
+        return EndpointResults.CreatedOrFailure(
+            result,
+            ProjectFailure.None,
+            project => $"/api/organizations/{organizationId}/projects/{project.Id}",
+            httpContext,
+            ToFailureResult);
     }
 
     private static async Task<IResult> GetProjectAsync(
@@ -62,7 +65,7 @@ public static class ProjectEndpoints
         CancellationToken cancellationToken)
     {
         var result = await projectService.GetProjectAsync(organizationId, projectId, cancellationToken);
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, ProjectFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> UpdateProjectAsync(
@@ -74,7 +77,7 @@ public static class ProjectEndpoints
         CancellationToken cancellationToken)
     {
         var result = await projectService.UpdateProjectAsync(organizationId, projectId, request, cancellationToken);
-        return ToOkResult(result, httpContext);
+        return EndpointResults.OkOrFailure(result, ProjectFailure.None, httpContext, ToFailureResult);
     }
 
     private static async Task<IResult> ArchiveProjectAsync(
@@ -85,16 +88,7 @@ public static class ProjectEndpoints
     {
         var result = await projectService.ArchiveProjectAsync(organizationId, projectId, cancellationToken);
 
-        return result.Failure == ProjectFailure.None
-            ? Results.NoContent()
-            : ToFailureResult(result);
-    }
-
-    private static IResult ToOkResult<T>(ServiceResult<T, ProjectFailure> result, HttpContext httpContext)
-    {
-        return result.IsSuccess(ProjectFailure.None)
-            ? EndpointResults.Ok(result.Value!, httpContext)
-            : ToFailureResult(result);
+        return EndpointResults.NoContentOrFailure(result, ProjectFailure.None, ToFailureResult);
     }
 
     private static IResult ToFailureResult<T>(ServiceResult<T, ProjectFailure> result)
@@ -102,17 +96,14 @@ public static class ProjectEndpoints
         return result.Failure switch
         {
             ProjectFailure.Validation => EndpointResults.ValidationProblem(result.Errors),
-            ProjectFailure.Unauthorized => Results.Unauthorized(),
-            ProjectFailure.Forbidden => Results.Problem(
-                title: "Forbidden.",
-                detail: "The current user does not have the required organization role.",
-                statusCode: StatusCodes.Status403Forbidden),
-            ProjectFailure.NotFound => Results.NotFound(),
-            ProjectFailure.DuplicateKey => Results.Problem(
-                title: "Duplicate project key.",
-                detail: "A project with this key already exists in the organization.",
-                statusCode: StatusCodes.Status409Conflict),
-            _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError)
+            ProjectFailure.Unauthorized => EndpointResults.Unauthorized(),
+            ProjectFailure.Forbidden => EndpointResults.ForbiddenProblem(
+                "The current user does not have the required organization role."),
+            ProjectFailure.NotFound => EndpointResults.NotFound(),
+            ProjectFailure.DuplicateKey => EndpointResults.ConflictProblem(
+                "Duplicate project key.",
+                "A project with this key already exists in the organization."),
+            _ => EndpointResults.InternalServerError()
         };
     }
 }
