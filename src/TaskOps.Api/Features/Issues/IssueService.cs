@@ -91,23 +91,22 @@ public sealed class IssueService(
 
         if (search is not null)
         {
-            var pattern = $"%{search}%";
+            var pattern = $"%{EscapeLikePattern(search)}%";
             issuesQuery = issuesQuery.Where(issue =>
-                EF.Functions.ILike(issue.Title, pattern) ||
-                (issue.Description != null && EF.Functions.ILike(issue.Description, pattern)));
+                EF.Functions.ILike(issue.Title, pattern, "\\") ||
+                (issue.Description != null && EF.Functions.ILike(issue.Description, pattern, "\\")));
         }
 
         var rows = await ApplySort(issuesQuery, sort)
             .Skip(offset)
             .Take(limit + 1)
-            .Select(issue => new IssueProjection(
+            .Select(issue => new IssueListProjection(
                 issue.Id,
                 issue.OrganizationId,
                 issue.ProjectId,
                 issue.Project.Key,
                 issue.Number,
                 issue.Title,
-                issue.Description,
                 issue.Status,
                 issue.Priority,
                 issue.Assignee == null ? null : issue.Assignee.Id,
@@ -149,51 +148,60 @@ public sealed class IssueService(
             return Validation<IssueResponse>(errors);
         }
 
-        var project = await dbContext.Projects
-            .AsNoTracking()
-            .Where(project =>
-                project.OrganizationId == organizationId &&
-                project.Id == request.ProjectId &&
-                !project.IsArchived)
-            .Select(project => new { project.Id, project.Key })
-            .FirstOrDefaultAsync(cancellationToken);
-        if (project is null)
+        Guid issueId;
+        await using (var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken))
         {
-            return Failure<IssueResponse>(IssueFailure.ProjectNotFound);
+            var project = await dbContext.Projects
+                .FromSqlInterpolated($"""
+                    SELECT *
+                    FROM "Projects"
+                    WHERE "OrganizationId" = {organizationId}
+                      AND "Id" = {request.ProjectId}
+                      AND NOT "IsArchived"
+                    FOR UPDATE
+                    """)
+                .Select(project => new { project.Id })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (project is null)
+            {
+                return Failure<IssueResponse>(IssueFailure.ProjectNotFound);
+            }
+
+            if (request.AssigneeId is { } assigneeId && !await IsOrganizationMemberAsync(organizationId, assigneeId, cancellationToken))
+            {
+                return Failure<IssueResponse>(IssueFailure.AssigneeNotOrganizationMember);
+            }
+
+            var nextNumber = await GetNextIssueNumberAsync(organizationId, project.Id, cancellationToken);
+            var issue = new Issue
+            {
+                Id = Guid.NewGuid(),
+                OrganizationId = organizationId,
+                ProjectId = project.Id,
+                Number = nextNumber,
+                Title = request.Title!.Trim(),
+                Description = NormalizeOptional(request.Description),
+                Status = IssueStatus.Todo,
+                Priority = priority,
+                AssigneeId = request.AssigneeId,
+                DueDate = request.DueDate
+            };
+
+            issueId = issue.Id;
+            dbContext.Issues.Add(issue);
+
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception) when (PostgresErrors.IsUniqueViolation(exception, "IX_Issues_OrganizationId_ProjectId_Number"))
+            {
+                return Failure<IssueResponse>(IssueFailure.IssueNumberConflict);
+            }
         }
 
-        if (request.AssigneeId is { } assigneeId && !await IsOrganizationMemberAsync(organizationId, assigneeId, cancellationToken))
-        {
-            return Failure<IssueResponse>(IssueFailure.AssigneeNotOrganizationMember);
-        }
-
-        var nextNumber = await GetNextIssueNumberAsync(organizationId, project.Id, cancellationToken);
-        var issue = new Issue
-        {
-            Id = Guid.NewGuid(),
-            OrganizationId = organizationId,
-            ProjectId = project.Id,
-            Number = nextNumber,
-            Title = request.Title!.Trim(),
-            Description = NormalizeOptional(request.Description),
-            Status = IssueStatus.Todo,
-            Priority = priority,
-            AssigneeId = request.AssigneeId,
-            DueDate = request.DueDate
-        };
-
-        dbContext.Issues.Add(issue);
-
-        try
-        {
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException exception) when (PostgresErrors.IsUniqueViolation(exception, "IX_Issues_OrganizationId_ProjectId_Number"))
-        {
-            return Failure<IssueResponse>(IssueFailure.IssueNumberConflict);
-        }
-
-        return await LoadIssueResponseAsync(organizationId, issue.Id, cancellationToken);
+        return await LoadIssueResponseAsync(organizationId, issueId, cancellationToken);
     }
 
     public async Task<ServiceResult<IssueResponse, IssueFailure>> GetIssueAsync(
@@ -580,19 +588,35 @@ public sealed class IssueService(
                 .ThenBy(issue => issue.Project.Key)
                 .ThenBy(issue => issue.Number),
             IssueSort.PriorityAscending => query
-                .OrderBy(issue => issue.Priority)
+                .OrderBy(issue =>
+                    issue.Priority == IssuePriority.Low ? 1 :
+                    issue.Priority == IssuePriority.Medium ? 2 :
+                    issue.Priority == IssuePriority.High ? 3 :
+                    4)
                 .ThenBy(issue => issue.Project.Key)
                 .ThenBy(issue => issue.Number),
             IssueSort.PriorityDescending => query
-                .OrderByDescending(issue => issue.Priority)
+                .OrderByDescending(issue =>
+                    issue.Priority == IssuePriority.Low ? 1 :
+                    issue.Priority == IssuePriority.Medium ? 2 :
+                    issue.Priority == IssuePriority.High ? 3 :
+                    4)
                 .ThenBy(issue => issue.Project.Key)
                 .ThenBy(issue => issue.Number),
             IssueSort.StatusAscending => query
-                .OrderBy(issue => issue.Status)
+                .OrderBy(issue =>
+                    issue.Status == IssueStatus.Todo ? 1 :
+                    issue.Status == IssueStatus.InProgress ? 2 :
+                    issue.Status == IssueStatus.InReview ? 3 :
+                    4)
                 .ThenBy(issue => issue.Project.Key)
                 .ThenBy(issue => issue.Number),
             IssueSort.StatusDescending => query
-                .OrderByDescending(issue => issue.Status)
+                .OrderByDescending(issue =>
+                    issue.Status == IssueStatus.Todo ? 1 :
+                    issue.Status == IssueStatus.InProgress ? 2 :
+                    issue.Status == IssueStatus.InReview ? 3 :
+                    4)
                 .ThenBy(issue => issue.Project.Key)
                 .ThenBy(issue => issue.Number),
             IssueSort.TitleAscending => query.OrderBy(issue => issue.Title).ThenBy(issue => issue.Id),
@@ -617,7 +641,7 @@ public sealed class IssueService(
     private static DateTimeOffset ToUtcStart(DateOnly date) =>
         new(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
 
-    private static IssueListItemResponse ToListItemResponse(IssueProjection row) =>
+    private static IssueListItemResponse ToListItemResponse(IssueListProjection row) =>
         new(
             row.Id,
             row.OrganizationId,
@@ -628,10 +652,16 @@ public sealed class IssueService(
             row.Title,
             IssueResponse.FormatStatus(row.Status),
             IssueResponse.FormatPriority(row.Priority),
-            ToAssigneeResponse(row),
+            ToAssigneeResponse(row.AssigneeMemberId, row.AssigneeUserId, row.AssigneeDisplayName, row.AssigneeEmail),
             row.DueDate,
             row.CreatedAt,
             row.UpdatedAt);
+
+    private static string EscapeLikePattern(string value) =>
+        value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
 
     private static IssueResponse ToIssueResponse(IssueProjection row) =>
         new(
@@ -645,19 +675,23 @@ public sealed class IssueService(
             row.Description,
             IssueResponse.FormatStatus(row.Status),
             IssueResponse.FormatPriority(row.Priority),
-            ToAssigneeResponse(row),
+            ToAssigneeResponse(row.AssigneeMemberId, row.AssigneeUserId, row.AssigneeDisplayName, row.AssigneeEmail),
             row.DueDate,
             row.CreatedAt,
             row.UpdatedAt);
 
-    private static IssueAssigneeResponse? ToAssigneeResponse(IssueProjection row) =>
-        row.AssigneeMemberId is null || row.AssigneeUserId is null || row.AssigneeDisplayName is null || row.AssigneeEmail is null
+    private static IssueAssigneeResponse? ToAssigneeResponse(
+        Guid? assigneeMemberId,
+        Guid? assigneeUserId,
+        string? assigneeDisplayName,
+        string? assigneeEmail) =>
+        assigneeMemberId is null || assigneeUserId is null || assigneeDisplayName is null || assigneeEmail is null
             ? null
             : new IssueAssigneeResponse(
-                row.AssigneeMemberId.Value,
-                row.AssigneeUserId.Value,
-                row.AssigneeDisplayName,
-                row.AssigneeEmail);
+                assigneeMemberId.Value,
+                assigneeUserId.Value,
+                assigneeDisplayName,
+                assigneeEmail);
 
     private static string FormatIssueKey(string projectKey, int number) => $"{projectKey}-{number}";
 
@@ -680,6 +714,23 @@ public sealed class IssueService(
 
     private static ServiceResult<T, IssueFailure> Failure<T>(IssueFailure failure) =>
         ServiceResult<T, IssueFailure>.Failed(failure);
+
+    private sealed record IssueListProjection(
+        Guid Id,
+        Guid OrganizationId,
+        Guid ProjectId,
+        string ProjectKey,
+        int Number,
+        string Title,
+        IssueStatus Status,
+        IssuePriority Priority,
+        Guid? AssigneeMemberId,
+        Guid? AssigneeUserId,
+        string? AssigneeDisplayName,
+        string? AssigneeEmail,
+        DateOnly? DueDate,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset UpdatedAt);
 
     private sealed record IssueProjection(
         Guid Id,

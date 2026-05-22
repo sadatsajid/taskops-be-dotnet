@@ -257,6 +257,115 @@ public sealed class IssueEndpointsTests(TaskOpsApiFactory factory) : IClassFixtu
     }
 
     [Fact]
+    public async Task CreateIssue_ConcurrentRequests_AssignSequentialNumbers()
+    {
+        var client = _factory.CreateClient();
+        var owner = await client.RegisterAsync($"issue-concurrent-owner-{Guid.NewGuid():N}@example.com", "Issue Test");
+        client.Authorize(owner);
+        var organization = await client.CreateOrganizationAsync("Issue Test Organization");
+        var project = await client.CreateProjectAsync(organization.Id, "Concurrent Project", "CONC");
+
+        var createTasks = Enumerable.Range(1, 20)
+            .Select(index => client.PostAsJsonAsync(
+                $"/api/organizations/{organization.Id}/issues",
+                new CreateIssueRequest(project.Id, $"Concurrent issue {index}", null, "Medium", null, null)))
+            .ToArray();
+
+        var responses = await Task.WhenAll(createTasks);
+        foreach (var response in responses)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            response.StatusCode.Should().Be(HttpStatusCode.Created, body);
+        }
+
+        var issues = await Task.WhenAll(responses.Select(async response =>
+        {
+            var envelope = await response.Content.ReadFromJsonAsync<ApiResponseEnvelope<IssueResponse>>();
+            return envelope!.Data;
+        }));
+
+        issues.Select(issue => issue.Number)
+            .Should()
+            .BeEquivalentTo(Enumerable.Range(1, 20));
+        issues.Select(issue => issue.Number).Should().OnlyHaveUniqueItems();
+        issues.Select(issue => issue.Key).Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public async Task ListIssues_SortsPriorityAndStatusSemantically()
+    {
+        var client = _factory.CreateClient();
+        var owner = await client.RegisterAsync($"issue-sort-owner-{Guid.NewGuid():N}@example.com", "Issue Test");
+        client.Authorize(owner);
+        var organization = await client.CreateOrganizationAsync("Issue Test Organization");
+        var project = await client.CreateProjectAsync(organization.Id, "Sort Project", "SORT");
+
+        var low = await client.CreateIssueAsync(organization.Id, project.Id, title: "Low priority", priority: "Low");
+        var critical = await client.CreateIssueAsync(organization.Id, project.Id, title: "Critical priority", priority: "Critical");
+        var high = await client.CreateIssueAsync(organization.Id, project.Id, title: "High priority", priority: "High");
+        var medium = await client.CreateIssueAsync(organization.Id, project.Id, title: "Medium priority", priority: "Medium");
+
+        var inProgressResponse = await client.PutAsJsonAsync(
+            $"/api/organizations/{organization.Id}/issues/{medium.Id}/status",
+            new ChangeIssueStatusRequest("InProgress"));
+        var inReviewResponse = await client.PutAsJsonAsync(
+            $"/api/organizations/{organization.Id}/issues/{high.Id}/status",
+            new ChangeIssueStatusRequest("InReview"));
+        var doneResponse = await client.PutAsJsonAsync(
+            $"/api/organizations/{organization.Id}/issues/{critical.Id}/status",
+            new ChangeIssueStatusRequest("Done"));
+        inProgressResponse.EnsureSuccessStatusCode();
+        inReviewResponse.EnsureSuccessStatusCode();
+        doneResponse.EnsureSuccessStatusCode();
+
+        var priorityAscending = await client.GetFromJsonAsync<ApiResponseEnvelope<PagedResponse<IssueListItemResponse>>>(
+            $"/api/organizations/{organization.Id}/issues?projectId={project.Id}&sort=priority");
+        var priorityDescending = await client.GetFromJsonAsync<ApiResponseEnvelope<PagedResponse<IssueListItemResponse>>>(
+            $"/api/organizations/{organization.Id}/issues?projectId={project.Id}&sort=-priority");
+        var statusAscending = await client.GetFromJsonAsync<ApiResponseEnvelope<PagedResponse<IssueListItemResponse>>>(
+            $"/api/organizations/{organization.Id}/issues?projectId={project.Id}&sort=status");
+        var statusDescending = await client.GetFromJsonAsync<ApiResponseEnvelope<PagedResponse<IssueListItemResponse>>>(
+            $"/api/organizations/{organization.Id}/issues?projectId={project.Id}&sort=-status");
+
+        priorityAscending!.Data.Items.Select(issue => issue.Priority)
+            .Should()
+            .Equal("Low", "Medium", "High", "Critical");
+        priorityDescending!.Data.Items.Select(issue => issue.Priority)
+            .Should()
+            .Equal("Critical", "High", "Medium", "Low");
+        statusAscending!.Data.Items.Select(issue => issue.Status)
+            .Should()
+            .Equal("Todo", "InProgress", "InReview", "Done");
+        statusDescending!.Data.Items.Select(issue => issue.Status)
+            .Should()
+            .Equal("Done", "InReview", "InProgress", "Todo");
+    }
+
+    [Fact]
+    public async Task ListIssues_SearchTreatsUnderscoreAsLiteralText()
+    {
+        var client = _factory.CreateClient();
+        var owner = await client.RegisterAsync($"issue-search-owner-{Guid.NewGuid():N}@example.com", "Issue Test");
+        client.Authorize(owner);
+        var organization = await client.CreateOrganizationAsync("Issue Test Organization");
+        var project = await client.CreateProjectAsync(organization.Id, "Search Project", "SRCH");
+        var literalMatch = await client.CreateIssueAsync(
+            organization.Id,
+            project.Id,
+            title: "Fix api_gateway callback");
+        await client.CreateIssueAsync(
+            organization.Id,
+            project.Id,
+            title: "Fix apiXgateway callback");
+
+        var response = await client.GetFromJsonAsync<ApiResponseEnvelope<PagedResponse<IssueListItemResponse>>>(
+            $"/api/organizations/{organization.Id}/issues?projectId={project.Id}&search=api_gateway");
+
+        response!.Data.Items.Should().ContainSingle();
+        response.Data.Items[0].Id.Should().Be(literalMatch.Id);
+    }
+
+    [Fact]
     public async Task IssueEndpoints_RejectAnonymousRequests()
     {
         var client = _factory.CreateClient();
