@@ -1,4 +1,5 @@
 using TaskOps.Api.Features.Auth;
+using TaskOps.Api.Features.Issues;
 using TaskOps.Api.Features.Organizations;
 using TaskOps.Api.Features.Projects;
 
@@ -11,6 +12,7 @@ public static class FeatureDependencyInjection
         services.AddAuthFeature();
         services.AddOrganizationFeature();
         services.AddProjectFeature();
+        services.AddIssueFeature();
 
         return services;
     }
