@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using TaskOps.Api.Features.Auth;
+using TaskOps.Api.Features.Issues;
 using TaskOps.Api.Features.Organizations;
 using TaskOps.Api.Features.Projects;
 
@@ -73,6 +74,25 @@ public static class ApiTestClientHelpers
 
         response.EnsureSuccessStatusCode();
         var envelope = await response.Content.ReadFromJsonAsync<ApiResponseEnvelope<ProjectResponse>>();
+        return envelope!.Data;
+    }
+
+    public static async Task<IssueResponse> CreateIssueAsync(
+        this HttpClient client,
+        Guid organizationId,
+        Guid projectId,
+        string title = "API Test Issue",
+        string? description = null,
+        string priority = "Medium",
+        Guid? assigneeId = null,
+        DateOnly? dueDate = null)
+    {
+        var response = await client.PostAsJsonAsync(
+            $"/api/organizations/{organizationId}/issues",
+            new CreateIssueRequest(projectId, title, description, priority, assigneeId, dueDate));
+
+        response.EnsureSuccessStatusCode();
+        var envelope = await response.Content.ReadFromJsonAsync<ApiResponseEnvelope<IssueResponse>>();
         return envelope!.Data;
     }
 }
