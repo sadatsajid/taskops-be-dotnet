@@ -7,7 +7,7 @@ using TaskOps.Api.Tests.Infrastructure;
 
 namespace TaskOps.Api.Tests;
 
-public sealed class ProjectEndpointsTests(TaskOpsApiFactory factory) : IClassFixture<TaskOpsApiFactory>
+public sealed class ProjectEndpointsTests(TaskOpsApiFactory factory) : IntegrationTestBase(factory), IClassFixture<TaskOpsApiFactory>
 {
     private readonly TaskOpsApiFactory _factory = factory;
 
@@ -15,8 +15,7 @@ public sealed class ProjectEndpointsTests(TaskOpsApiFactory factory) : IClassFix
     public async Task CreateProject_ForOwner_CreatesOrganizationScopedProject()
     {
         var client = _factory.CreateClient();
-        var registered = await client.RegisterAsync($"project-owner-{Guid.NewGuid():N}@example.com", "Project Test");
-        client.Authorize(registered);
+        await client.RegisterAndAuthorizeAsync($"project-owner-{Guid.NewGuid():N}@example.com", "Project Test");
         var organization = await client.CreateOrganizationAsync("Project Test Organization");
 
         var response = await client.PostAsJsonAsync(
@@ -32,6 +31,46 @@ public sealed class ProjectEndpointsTests(TaskOpsApiFactory factory) : IClassFix
         envelope.Data.Key.Should().Be("API");
         envelope.Data.Description.Should().Be("Core service work");
         envelope.Data.IsArchived.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("Admin")]
+    [InlineData("ProjectManager")]
+    public async Task CreateProject_ForOrganizationManagers_CreatesProject(string role)
+    {
+        var ownerClient = _factory.CreateClient();
+        await ownerClient.RegisterAndAuthorizeAsync($"project-manager-owner-{role}-{Guid.NewGuid():N}@example.com", "Project Test");
+        var organization = await ownerClient.CreateOrganizationAsync("Project Test Organization");
+
+        var managerClient = _factory.CreateClient();
+        var manager = await managerClient.RegisterAndAuthorizeAsync($"project-manager-{role}-{Guid.NewGuid():N}@example.com", "Project Test");
+        await ownerClient.AddMemberAsync(organization.Id, manager.CurrentUser.Email, role);
+
+        var response = await managerClient.PostAsJsonAsync(
+            $"/api/organizations/{organization.Id}/projects",
+            new CreateProjectRequest($"{role} Project", $"{role[..3]}{Guid.NewGuid():N}"[..8], null));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    [Theory]
+    [InlineData("Developer")]
+    [InlineData("Viewer")]
+    public async Task CreateProject_ForNonManagerMember_ReturnsForbidden(string role)
+    {
+        var ownerClient = _factory.CreateClient();
+        await ownerClient.RegisterAndAuthorizeAsync($"project-forbidden-owner-{role}-{Guid.NewGuid():N}@example.com", "Project Test");
+        var organization = await ownerClient.CreateOrganizationAsync("Project Test Organization");
+
+        var memberClient = _factory.CreateClient();
+        var member = await memberClient.RegisterAndAuthorizeAsync($"project-forbidden-member-{role}-{Guid.NewGuid():N}@example.com", "Project Test");
+        await ownerClient.AddMemberAsync(organization.Id, member.CurrentUser.Email, role);
+
+        var response = await memberClient.PostAsJsonAsync(
+            $"/api/organizations/{organization.Id}/projects",
+            new CreateProjectRequest($"{role} Project", $"{role[..3]}{Guid.NewGuid():N}"[..8], null));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
@@ -68,6 +107,22 @@ public sealed class ProjectEndpointsTests(TaskOpsApiFactory factory) : IClassFix
         outsiderClient.Authorize(outsider);
 
         var response = await outsiderClient.GetAsync($"/api/organizations/{organization.Id}/projects/{project.Id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task UpdateProject_WithProjectFromAnotherOrganization_ReturnsNotFound()
+    {
+        var client = _factory.CreateClient();
+        await client.RegisterAndAuthorizeAsync($"project-cross-route-owner-{Guid.NewGuid():N}@example.com", "Project Test");
+        var firstOrganization = await client.CreateOrganizationAsync("First Organization");
+        var secondOrganization = await client.CreateOrganizationAsync("Second Organization");
+        var project = await client.CreateProjectAsync(firstOrganization.Id, "First Project", "FIRST");
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/organizations/{secondOrganization.Id}/projects/{project.Id}",
+            new UpdateProjectRequest("Moved Project", "MOVED", null));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }

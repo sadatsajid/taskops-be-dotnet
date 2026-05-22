@@ -5,7 +5,7 @@ using TaskOps.Api.Tests.Infrastructure;
 
 namespace TaskOps.Api.Tests;
 
-public sealed class SystemEndpointsTests(TaskOpsApiFactory factory) : IClassFixture<TaskOpsApiFactory>
+public sealed class SystemEndpointsTests(TaskOpsApiFactory factory) : IntegrationTestBase(factory), IClassFixture<TaskOpsApiFactory>
 {
     private readonly HttpClient _client = factory.CreateClient();
 

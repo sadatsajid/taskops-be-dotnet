@@ -7,7 +7,7 @@ using TaskOps.Api.Tests.Infrastructure;
 
 namespace TaskOps.Api.Tests;
 
-public sealed class IssueEndpointsTests(TaskOpsApiFactory factory) : IClassFixture<TaskOpsApiFactory>
+public sealed class IssueEndpointsTests(TaskOpsApiFactory factory) : IntegrationTestBase(factory), IClassFixture<TaskOpsApiFactory>
 {
     private readonly TaskOpsApiFactory _factory = factory;
 
@@ -119,6 +119,43 @@ public sealed class IssueEndpointsTests(TaskOpsApiFactory factory) : IClassFixtu
     }
 
     [Fact]
+    public async Task CreateIssue_WithProjectFromAnotherOrganization_ReturnsNotFound()
+    {
+        var client = _factory.CreateClient();
+        await client.RegisterAndAuthorizeAsync($"issue-cross-project-owner-{Guid.NewGuid():N}@example.com", "Issue Test");
+        var firstOrganization = await client.CreateOrganizationAsync("First Organization");
+        var firstProject = await client.CreateProjectAsync(firstOrganization.Id, "First Project", "FIRST");
+        var secondOrganization = await client.CreateOrganizationAsync("Second Organization");
+
+        var response = await client.PostAsJsonAsync(
+            $"/api/organizations/{secondOrganization.Id}/issues",
+            new CreateIssueRequest(firstProject.Id, "Wrong project", null, "Medium", null, null));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task AssignIssue_WithAssigneeFromAnotherOrganization_ReturnsBadRequest()
+    {
+        var client = _factory.CreateClient();
+        await client.RegisterAndAuthorizeAsync($"issue-assign-owner-{Guid.NewGuid():N}@example.com", "Issue Test");
+        var firstOrganization = await client.CreateOrganizationAsync("First Organization");
+        var firstProject = await client.CreateProjectAsync(firstOrganization.Id, "First Project", "FIRST");
+        var issue = await client.CreateIssueAsync(firstOrganization.Id, firstProject.Id);
+        var secondOrganization = await client.CreateOrganizationAsync("Second Organization");
+
+        var otherUserClient = _factory.CreateClient();
+        var otherUser = await otherUserClient.RegisterAsync($"issue-assign-other-{Guid.NewGuid():N}@example.com", "Issue Test");
+        var otherOrganizationMember = await client.AddMemberAsync(secondOrganization.Id, otherUser.CurrentUser.Email, "Developer");
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/organizations/{firstOrganization.Id}/issues/{issue.Id}/assignment",
+            new AssignIssueRequest(otherOrganizationMember.Id));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task GetIssue_ForNonMember_ReturnsNotFound()
     {
         var ownerClient = _factory.CreateClient();
@@ -133,6 +170,21 @@ public sealed class IssueEndpointsTests(TaskOpsApiFactory factory) : IClassFixtu
         outsiderClient.Authorize(outsider);
 
         var response = await outsiderClient.GetAsync($"/api/organizations/{organization.Id}/issues/{issue.Id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task ListIssues_ForNonMember_ReturnsNotFound()
+    {
+        var ownerClient = _factory.CreateClient();
+        await ownerClient.RegisterAndAuthorizeAsync($"issue-list-private-owner-{Guid.NewGuid():N}@example.com", "Issue Test");
+        var organization = await ownerClient.CreateOrganizationAsync("Issue Test Organization");
+
+        var outsiderClient = _factory.CreateClient();
+        await outsiderClient.RegisterAndAuthorizeAsync($"issue-list-outsider-{Guid.NewGuid():N}@example.com", "Issue Test");
+
+        var response = await outsiderClient.GetAsync($"/api/organizations/{organization.Id}/issues");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }

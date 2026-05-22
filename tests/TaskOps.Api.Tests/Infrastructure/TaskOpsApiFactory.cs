@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using TaskOps.Api.Persistence;
 using Testcontainers.PostgreSql;
 
 namespace TaskOps.Api.Tests.Infrastructure;
@@ -32,7 +35,7 @@ public sealed class TaskOpsApiFactory : WebApplicationFactory<Program>, IAsyncLi
             {
                 ["ConnectionStrings:TaskOpsDatabase"] = _postgres.GetConnectionString(),
                 ["Database:ApplyMigrationsOnStartup"] = "true",
-                ["Database:SeedDevelopmentData"] = "true",
+                ["Database:SeedDevelopmentData"] = "false",
                 ["Jwt:Issuer"] = "TaskOps.Tests",
                 ["Jwt:Audience"] = "TaskOps.Api.Tests",
                 ["Jwt:SigningKey"] = "integration-test-taskops-signing-key-change-before-production",
@@ -42,5 +45,22 @@ public sealed class TaskOpsApiFactory : WebApplicationFactory<Program>, IAsyncLi
 
             configurationBuilder.AddInMemoryCollection(overrides);
         });
+    }
+
+    public async Task ResetDatabaseAsync()
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TaskOpsDbContext>();
+
+        await dbContext.Database.ExecuteSqlRawAsync("""
+            TRUNCATE TABLE
+                "Issues",
+                "Projects",
+                "OrganizationMembers",
+                "RefreshTokens",
+                "Organizations",
+                "Users"
+            RESTART IDENTITY CASCADE;
+            """);
     }
 }

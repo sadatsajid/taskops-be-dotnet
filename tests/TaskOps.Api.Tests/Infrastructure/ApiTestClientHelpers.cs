@@ -32,6 +32,17 @@ public static class ApiTestClientHelpers
             authResponse.AccessToken);
     }
 
+    public static async Task<AuthResponse> RegisterAndAuthorizeAsync(
+        this HttpClient client,
+        string email,
+        string displayName = "API Test",
+        string password = "Password123!")
+    {
+        var authResponse = await client.RegisterAsync(email, displayName, password);
+        client.Authorize(authResponse);
+        return authResponse;
+    }
+
     public static async Task<OrganizationResponse> CreateOrganizationAsync(
         this HttpClient client,
         string name = "API Test Organization",

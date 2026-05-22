@@ -11,7 +11,7 @@ using TaskOps.Api.Tests.Infrastructure;
 
 namespace TaskOps.Api.Tests;
 
-public sealed class OrganizationEndpointsTests(TaskOpsApiFactory factory) : IClassFixture<TaskOpsApiFactory>
+public sealed class OrganizationEndpointsTests(TaskOpsApiFactory factory) : IntegrationTestBase(factory), IClassFixture<TaskOpsApiFactory>
 {
     private readonly TaskOpsApiFactory _factory = factory;
 
@@ -104,6 +104,46 @@ public sealed class OrganizationEndpointsTests(TaskOpsApiFactory factory) : ICla
         var listAfterRemove = await ownerClient.GetFromJsonAsync<ApiResponseEnvelope<PagedResponse<OrganizationMemberResponse>>>(
             $"/api/organizations/{organization.Id}/members");
         listAfterRemove!.Data.Items.Should().NotContain(member => member.UserId == developer.CurrentUser.Id);
+    }
+
+    [Theory]
+    [InlineData("Admin")]
+    [InlineData("ProjectManager")]
+    [InlineData("Developer")]
+    [InlineData("Viewer")]
+    public async Task AddMember_ForNonOwner_ReturnsForbidden(string role)
+    {
+        var ownerClient = _factory.CreateClient();
+        await ownerClient.RegisterAndAuthorizeAsync($"org-non-owner-owner-{role}-{Guid.NewGuid():N}@example.com", "Organization Test");
+        var organization = await ownerClient.CreateOrganizationAsync("Organization Test");
+
+        var memberClient = _factory.CreateClient();
+        var member = await memberClient.RegisterAndAuthorizeAsync($"org-non-owner-member-{role}-{Guid.NewGuid():N}@example.com", "Organization Test");
+        await ownerClient.AddMemberAsync(organization.Id, member.CurrentUser.Email, role);
+
+        var candidateClient = _factory.CreateClient();
+        var candidate = await candidateClient.RegisterAsync($"org-non-owner-candidate-{role}-{Guid.NewGuid():N}@example.com", "Organization Test");
+
+        var response = await memberClient.PostAsJsonAsync(
+            $"/api/organizations/{organization.Id}/members",
+            new AddOrganizationMemberRequest(candidate.CurrentUser.Email, "Developer"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task ListMembers_ForNonMember_ReturnsNotFound()
+    {
+        var ownerClient = _factory.CreateClient();
+        await ownerClient.RegisterAndAuthorizeAsync($"org-list-private-owner-{Guid.NewGuid():N}@example.com", "Organization Test");
+        var organization = await ownerClient.CreateOrganizationAsync("Organization Test");
+
+        var outsiderClient = _factory.CreateClient();
+        await outsiderClient.RegisterAndAuthorizeAsync($"org-list-outsider-{Guid.NewGuid():N}@example.com", "Organization Test");
+
+        var response = await outsiderClient.GetAsync($"/api/organizations/{organization.Id}/members");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
