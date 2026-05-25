@@ -1,3 +1,4 @@
+using TaskOps.Api.Modules.Organizations.Access;
 using TaskOps.Api.Shared.Api;
 
 namespace TaskOps.Api.Modules.Issues;
@@ -7,32 +8,39 @@ public static class IssueEndpoints
     public static IEndpointRouteBuilder MapIssueEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/organizations/{organizationId:guid}/issues")
-            .RequireAuthorization()
             .WithTags("Issues");
 
         group.MapGet("", ListIssuesAsync)
-            .WithName("ListIssues");
+            .WithName("ListIssues")
+            .RequireAuthorization(OrganizationPolicies.Member);
 
         group.MapPost("", CreateIssueAsync)
-            .WithName("CreateIssue");
+            .WithName("CreateIssue")
+            .RequireAuthorization(OrganizationPolicies.ProjectManagement);
 
         group.MapGet("/{issueId:guid}", GetIssueAsync)
-            .WithName("GetIssue");
+            .WithName("GetIssue")
+            .RequireAuthorization(OrganizationPolicies.Member);
 
         group.MapPut("/{issueId:guid}", UpdateIssueAsync)
-            .WithName("UpdateIssue");
+            .WithName("UpdateIssue")
+            .RequireAuthorization(OrganizationPolicies.ProjectManagement);
 
         group.MapPut("/{issueId:guid}/assignment", AssignIssueAsync)
-            .WithName("AssignIssue");
+            .WithName("AssignIssue")
+            .RequireAuthorization(OrganizationPolicies.ProjectManagement);
 
         group.MapPut("/{issueId:guid}/status", ChangeStatusAsync)
-            .WithName("ChangeIssueStatus");
+            .WithName("ChangeIssueStatus")
+            .RequireAuthorization(OrganizationPolicies.Member);
 
         group.MapPut("/{issueId:guid}/priority", ChangePriorityAsync)
-            .WithName("ChangeIssuePriority");
+            .WithName("ChangeIssuePriority")
+            .RequireAuthorization(OrganizationPolicies.ProjectManagement);
 
         group.MapPut("/{issueId:guid}/due-date", SetDueDateAsync)
-            .WithName("SetIssueDueDate");
+            .WithName("SetIssueDueDate")
+            .RequireAuthorization(OrganizationPolicies.ProjectManagement);
 
         return endpoints;
     }
@@ -167,7 +175,6 @@ public static class IssueEndpoints
         return result.Failure switch
         {
             IssueFailure.Validation => EndpointResults.ValidationProblem(result.Errors),
-            IssueFailure.Unauthorized => EndpointResults.Unauthorized(),
             IssueFailure.Forbidden => EndpointResults.ForbiddenProblem(
                 "The current user does not have permission to modify this issue."),
             IssueFailure.NotFound => EndpointResults.NotFound(),

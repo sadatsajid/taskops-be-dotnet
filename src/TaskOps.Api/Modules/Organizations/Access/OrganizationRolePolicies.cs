@@ -1,6 +1,6 @@
 using TaskOps.Api.Persistence.Entities;
 
-namespace TaskOps.Api.Shared.Security;
+namespace TaskOps.Api.Modules.Organizations.Access;
 
 public static class OrganizationRolePolicies
 {

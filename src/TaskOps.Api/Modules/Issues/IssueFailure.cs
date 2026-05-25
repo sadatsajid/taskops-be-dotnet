@@ -4,10 +4,9 @@ public enum IssueFailure
 {
     None = 0,
     Validation = 1,
-    Unauthorized = 2,
-    Forbidden = 3,
-    NotFound = 4,
-    ProjectNotFound = 5,
-    AssigneeNotOrganizationMember = 6,
-    IssueNumberConflict = 7
+    Forbidden = 2,
+    NotFound = 3,
+    ProjectNotFound = 4,
+    AssigneeNotOrganizationMember = 5,
+    IssueNumberConflict = 6
 }

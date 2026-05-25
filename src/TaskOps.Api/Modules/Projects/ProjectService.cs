@@ -3,13 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using TaskOps.Api.Persistence;
 using TaskOps.Api.Persistence.Entities;
 using TaskOps.Api.Shared.Api;
-using TaskOps.Api.Shared.Security;
 
 namespace TaskOps.Api.Modules.Projects;
 
 public sealed class ProjectService(
     TaskOpsDbContext dbContext,
-    IOrganizationAccessService organizationAccess,
     TimeProvider timeProvider,
     IValidator<CreateProjectRequest> createProjectValidator,
     IValidator<UpdateProjectRequest> updateProjectValidator) : IProjectService
@@ -22,12 +20,6 @@ public sealed class ProjectService(
         bool includeArchived,
         CancellationToken cancellationToken)
     {
-        var access = await organizationAccess.RequireMembershipAsync(organizationId, cancellationToken);
-        if (!access.IsAllowed)
-        {
-            return Failure<PagedResponse<ProjectListItemResponse>>(ToProjectFailure(access.Status));
-        }
-
         var limit = page.SafeLimit;
         var offset = page.SafeOffset;
         var projects = await dbContext.Projects
@@ -59,12 +51,6 @@ public sealed class ProjectService(
         CreateProjectRequest request,
         CancellationToken cancellationToken)
     {
-        var access = await RequireProjectManagerAsync(organizationId, cancellationToken);
-        if (access != ProjectFailure.None)
-        {
-            return Failure<ProjectResponse>(access);
-        }
-
         var validation = await createProjectValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
@@ -109,12 +95,6 @@ public sealed class ProjectService(
         Guid projectId,
         CancellationToken cancellationToken)
     {
-        var access = await organizationAccess.RequireMembershipAsync(organizationId, cancellationToken);
-        if (!access.IsAllowed)
-        {
-            return Failure<ProjectResponse>(ToProjectFailure(access.Status));
-        }
-
         var response = await dbContext.Projects
             .AsNoTracking()
             .Where(project => project.OrganizationId == organizationId && project.Id == projectId)
@@ -140,12 +120,6 @@ public sealed class ProjectService(
         UpdateProjectRequest request,
         CancellationToken cancellationToken)
     {
-        var access = await RequireProjectManagerAsync(organizationId, cancellationToken);
-        if (access != ProjectFailure.None)
-        {
-            return Failure<ProjectResponse>(access);
-        }
-
         var validation = await updateProjectValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
@@ -193,12 +167,6 @@ public sealed class ProjectService(
         Guid projectId,
         CancellationToken cancellationToken)
     {
-        var access = await RequireProjectManagerAsync(organizationId, cancellationToken);
-        if (access != ProjectFailure.None)
-        {
-            return Failure<object>(access);
-        }
-
         var updated = await dbContext.Projects
             .Where(project => project.OrganizationId == organizationId && project.Id == projectId)
             .ExecuteUpdateAsync(
@@ -212,15 +180,6 @@ public sealed class ProjectService(
             : Success(Empty);
     }
 
-    private async Task<ProjectFailure> RequireProjectManagerAsync(Guid organizationId, CancellationToken cancellationToken)
-    {
-        var access = await organizationAccess.RequireAnyRoleAsync(
-            organizationId,
-            OrganizationRolePolicies.ProjectManagement,
-            cancellationToken);
-        return access.IsAllowed ? ProjectFailure.None : ToProjectFailure(access.Status);
-    }
-
     private static ProjectResponse ToResponse(Project project) =>
         new(
             project.Id,
@@ -231,17 +190,6 @@ public sealed class ProjectService(
             project.IsArchived,
             project.CreatedAt,
             project.UpdatedAt);
-
-    private static ProjectFailure ToProjectFailure(OrganizationAccessStatus status)
-    {
-        return status switch
-        {
-            OrganizationAccessStatus.Unauthorized => ProjectFailure.Unauthorized,
-            OrganizationAccessStatus.NotFound => ProjectFailure.NotFound,
-            OrganizationAccessStatus.Forbidden => ProjectFailure.Forbidden,
-            _ => ProjectFailure.None
-        };
-    }
 
     private static ServiceResult<T, ProjectFailure> Success<T>(T value) =>
         ServiceResult<T, ProjectFailure>.Success(value, ProjectFailure.None);

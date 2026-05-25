@@ -1,5 +1,5 @@
+using TaskOps.Api.Modules.Organizations.Access;
 using TaskOps.Api.Persistence.Entities;
-using TaskOps.Api.Shared.Security;
 
 namespace TaskOps.Api.Modules.Issues;
 

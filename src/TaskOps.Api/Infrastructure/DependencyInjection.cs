@@ -24,7 +24,6 @@ public static class DependencyInjection
         services.AddSingleton<IJwtSigningKeyProvider, JwtSigningKeyProvider>();
         services.ConfigureOptions<JwtBearerOptionsSetup>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
-        services.AddScoped<IOrganizationAccessService, OrganizationAccessService>();
         services.AddTaskOpsModules();
 
         services.AddOptions<JwtOptions>()

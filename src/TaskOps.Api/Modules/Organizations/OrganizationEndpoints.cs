@@ -1,3 +1,4 @@
+using TaskOps.Api.Modules.Organizations.Access;
 using TaskOps.Api.Shared.Api;
 
 namespace TaskOps.Api.Modules.Organizations;
@@ -17,22 +18,28 @@ public static class OrganizationEndpoints
             .WithName("CreateOrganization");
 
         group.MapGet("/{organizationId:guid}", GetOrganizationAsync)
-            .WithName("GetOrganization");
+            .WithName("GetOrganization")
+            .RequireAuthorization(OrganizationPolicies.Member);
 
         group.MapPut("/{organizationId:guid}", UpdateOrganizationAsync)
-            .WithName("UpdateOrganization");
+            .WithName("UpdateOrganization")
+            .RequireAuthorization(OrganizationPolicies.Owner);
 
         group.MapGet("/{organizationId:guid}/members", ListMembersAsync)
-            .WithName("ListOrganizationMembers");
+            .WithName("ListOrganizationMembers")
+            .RequireAuthorization(OrganizationPolicies.Member);
 
         group.MapPost("/{organizationId:guid}/members", AddMemberAsync)
-            .WithName("AddOrganizationMember");
+            .WithName("AddOrganizationMember")
+            .RequireAuthorization(OrganizationPolicies.Owner);
 
         group.MapPut("/{organizationId:guid}/members/{memberId:guid}/role", ChangeMemberRoleAsync)
-            .WithName("ChangeOrganizationMemberRole");
+            .WithName("ChangeOrganizationMemberRole")
+            .RequireAuthorization(OrganizationPolicies.Owner);
 
         group.MapDelete("/{organizationId:guid}/members/{memberId:guid}", RemoveMemberAsync)
-            .WithName("RemoveOrganizationMember");
+            .WithName("RemoveOrganizationMember")
+            .RequireAuthorization(OrganizationPolicies.Owner);
 
         return endpoints;
     }
@@ -141,8 +148,6 @@ public static class OrganizationEndpoints
         {
             OrganizationFailure.Validation => EndpointResults.ValidationProblem(result.Errors),
             OrganizationFailure.Unauthorized => EndpointResults.Unauthorized(),
-            OrganizationFailure.Forbidden => EndpointResults.ForbiddenProblem(
-                "The current user does not have the required organization role."),
             OrganizationFailure.NotFound => EndpointResults.NotFound(),
             OrganizationFailure.DuplicateSlug => EndpointResults.ConflictProblem(
                 "Duplicate organization slug.",

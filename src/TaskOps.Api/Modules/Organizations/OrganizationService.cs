@@ -1,6 +1,7 @@
 using System.Data;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using TaskOps.Api.Modules.Organizations.Access;
 using TaskOps.Api.Persistence;
 using TaskOps.Api.Persistence.Entities;
 using TaskOps.Api.Shared.Api;
@@ -11,7 +12,6 @@ namespace TaskOps.Api.Modules.Organizations;
 public sealed class OrganizationService(
     TaskOpsDbContext dbContext,
     ICurrentUserService currentUser,
-    IOrganizationAccessService organizationAccess,
     TimeProvider timeProvider,
     IValidator<CreateOrganizationRequest> createOrganizationValidator,
     IValidator<UpdateOrganizationRequest> updateOrganizationValidator,
@@ -131,10 +131,7 @@ public sealed class OrganizationService(
         Guid organizationId,
         CancellationToken cancellationToken)
     {
-        if (currentUser.UserId is not { } userId)
-        {
-            return Failure<OrganizationResponse>(OrganizationFailure.Unauthorized);
-        }
+        var userId = currentUser.UserId!.Value;
 
         var response = await dbContext.OrganizationMembers
             .AsNoTracking()
@@ -162,12 +159,6 @@ public sealed class OrganizationService(
         UpdateOrganizationRequest request,
         CancellationToken cancellationToken)
     {
-        var access = await RequireOwnerAsync(organizationId, cancellationToken);
-        if (access != OrganizationFailure.None)
-        {
-            return Failure<OrganizationResponse>(access);
-        }
-
         var validation = await updateOrganizationValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
@@ -211,12 +202,6 @@ public sealed class OrganizationService(
         PageRequest page,
         CancellationToken cancellationToken)
     {
-        var access = await organizationAccess.RequireMembershipAsync(organizationId, cancellationToken);
-        if (!access.IsAllowed)
-        {
-            return Failure<PagedResponse<OrganizationMemberResponse>>(ToOrganizationFailure(access.Status));
-        }
-
         var limit = page.SafeLimit;
         var offset = page.SafeOffset;
         var members = await dbContext.OrganizationMembers
@@ -249,12 +234,6 @@ public sealed class OrganizationService(
         AddOrganizationMemberRequest request,
         CancellationToken cancellationToken)
     {
-        var access = await RequireOwnerAsync(organizationId, cancellationToken);
-        if (access != OrganizationFailure.None)
-        {
-            return Failure<OrganizationMemberResponse>(access);
-        }
-
         var validation = await addMemberValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
@@ -316,12 +295,6 @@ public sealed class OrganizationService(
         ChangeOrganizationMemberRoleRequest request,
         CancellationToken cancellationToken)
     {
-        var access = await RequireOwnerAsync(organizationId, cancellationToken);
-        if (access != OrganizationFailure.None)
-        {
-            return Failure<OrganizationMemberResponse>(access);
-        }
-
         var validation = await changeMemberRoleValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
@@ -376,12 +349,6 @@ public sealed class OrganizationService(
         Guid memberId,
         CancellationToken cancellationToken)
     {
-        var access = await RequireOwnerAsync(organizationId, cancellationToken);
-        if (access != OrganizationFailure.None)
-        {
-            return Failure<object>(access);
-        }
-
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
             IsolationLevel.Serializable,
             cancellationToken);
@@ -413,15 +380,6 @@ public sealed class OrganizationService(
         }
     }
 
-    private async Task<OrganizationFailure> RequireOwnerAsync(Guid organizationId, CancellationToken cancellationToken)
-    {
-        var access = await organizationAccess.RequireAnyRoleAsync(
-            organizationId,
-            OrganizationRolePolicies.OwnerOnly,
-            cancellationToken);
-        return access.IsAllowed ? OrganizationFailure.None : ToOrganizationFailure(access.Status);
-    }
-
     private async Task<bool> IsLastOwnerAsync(Guid organizationId, CancellationToken cancellationToken)
     {
         var ownerCount = await dbContext.OrganizationMembers.CountAsync(
@@ -429,17 +387,6 @@ public sealed class OrganizationService(
             cancellationToken);
 
         return ownerCount <= 1;
-    }
-
-    private static OrganizationFailure ToOrganizationFailure(OrganizationAccessStatus status)
-    {
-        return status switch
-        {
-            OrganizationAccessStatus.Unauthorized => OrganizationFailure.Unauthorized,
-            OrganizationAccessStatus.NotFound => OrganizationFailure.NotFound,
-            OrganizationAccessStatus.Forbidden => OrganizationFailure.Forbidden,
-            _ => OrganizationFailure.None
-        };
     }
 
     private static ServiceResult<T, OrganizationFailure> Success<T>(T value) =>

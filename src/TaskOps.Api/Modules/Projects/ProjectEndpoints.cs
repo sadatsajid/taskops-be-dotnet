@@ -1,3 +1,4 @@
+using TaskOps.Api.Modules.Organizations.Access;
 using TaskOps.Api.Shared.Api;
 
 namespace TaskOps.Api.Modules.Projects;
@@ -7,23 +8,27 @@ public static class ProjectEndpoints
     public static IEndpointRouteBuilder MapProjectEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/organizations/{organizationId:guid}/projects")
-            .RequireAuthorization()
             .WithTags("Projects");
 
         group.MapGet("", ListProjectsAsync)
-            .WithName("ListProjects");
+            .WithName("ListProjects")
+            .RequireAuthorization(OrganizationPolicies.Member);
 
         group.MapPost("", CreateProjectAsync)
-            .WithName("CreateProject");
+            .WithName("CreateProject")
+            .RequireAuthorization(OrganizationPolicies.ProjectManagement);
 
         group.MapGet("/{projectId:guid}", GetProjectAsync)
-            .WithName("GetProject");
+            .WithName("GetProject")
+            .RequireAuthorization(OrganizationPolicies.Member);
 
         group.MapPut("/{projectId:guid}", UpdateProjectAsync)
-            .WithName("UpdateProject");
+            .WithName("UpdateProject")
+            .RequireAuthorization(OrganizationPolicies.ProjectManagement);
 
         group.MapPost("/{projectId:guid}/archive", ArchiveProjectAsync)
-            .WithName("ArchiveProject");
+            .WithName("ArchiveProject")
+            .RequireAuthorization(OrganizationPolicies.ProjectManagement);
 
         return endpoints;
     }
@@ -96,9 +101,6 @@ public static class ProjectEndpoints
         return result.Failure switch
         {
             ProjectFailure.Validation => EndpointResults.ValidationProblem(result.Errors),
-            ProjectFailure.Unauthorized => EndpointResults.Unauthorized(),
-            ProjectFailure.Forbidden => EndpointResults.ForbiddenProblem(
-                "The current user does not have the required organization role."),
             ProjectFailure.NotFound => EndpointResults.NotFound(),
             ProjectFailure.DuplicateKey => EndpointResults.ConflictProblem(
                 "Duplicate project key.",

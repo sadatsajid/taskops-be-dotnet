@@ -1,8 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using TaskOps.Api.Persistence;
 using TaskOps.Api.Persistence.Entities;
+using TaskOps.Api.Shared.Security;
 
-namespace TaskOps.Api.Shared.Security;
+namespace TaskOps.Api.Modules.Organizations.Access;
 
 public sealed class OrganizationAccessService(
     TaskOpsDbContext dbContext,

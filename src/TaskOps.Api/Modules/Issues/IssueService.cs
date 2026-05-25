@@ -1,15 +1,15 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using TaskOps.Api.Modules.Organizations.Access;
 using TaskOps.Api.Persistence;
 using TaskOps.Api.Persistence.Entities;
 using TaskOps.Api.Shared.Api;
-using TaskOps.Api.Shared.Security;
 
 namespace TaskOps.Api.Modules.Issues;
 
 public sealed class IssueService(
     TaskOpsDbContext dbContext,
-    IOrganizationAccessService organizationAccess,
+    IOrganizationContext organizationContext,
     IValidator<IssueListQuery> issueListQueryValidator,
     IValidator<CreateIssueRequest> createIssueValidator,
     IValidator<UpdateIssueRequest> updateIssueValidator,
@@ -21,12 +21,6 @@ public sealed class IssueService(
         IssueListQuery query,
         CancellationToken cancellationToken)
     {
-        var access = await organizationAccess.RequireMembershipAsync(organizationId, cancellationToken);
-        if (!access.IsAllowed)
-        {
-            return Failure<PagedResponse<IssueListItemResponse>>(ToIssueFailure(access.Status));
-        }
-
         var validation = await issueListQueryValidator.ValidateAsync(query, cancellationToken);
         if (!validation.IsValid)
         {
@@ -42,12 +36,6 @@ public sealed class IssueService(
         CreateIssueRequest request,
         CancellationToken cancellationToken)
     {
-        var access = await RequireIssueManagerAsync(organizationId, cancellationToken);
-        if (access != IssueFailure.None)
-        {
-            return Failure<IssueResponse>(access);
-        }
-
         var validation = await createIssueValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
@@ -112,16 +100,8 @@ public sealed class IssueService(
     public async Task<ServiceResult<IssueResponse, IssueFailure>> GetIssueAsync(
         Guid organizationId,
         Guid issueId,
-        CancellationToken cancellationToken)
-    {
-        var access = await organizationAccess.RequireMembershipAsync(organizationId, cancellationToken);
-        if (!access.IsAllowed)
-        {
-            return Failure<IssueResponse>(ToIssueFailure(access.Status));
-        }
-
-        return await LoadIssueResponseAsync(organizationId, issueId, cancellationToken);
-    }
+        CancellationToken cancellationToken) =>
+        await LoadIssueResponseAsync(organizationId, issueId, cancellationToken);
 
     public async Task<ServiceResult<IssueResponse, IssueFailure>> UpdateIssueAsync(
         Guid organizationId,
@@ -129,12 +109,6 @@ public sealed class IssueService(
         UpdateIssueRequest request,
         CancellationToken cancellationToken)
     {
-        var access = await RequireIssueManagerAsync(organizationId, cancellationToken);
-        if (access != IssueFailure.None)
-        {
-            return Failure<IssueResponse>(access);
-        }
-
         var validation = await updateIssueValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
@@ -163,12 +137,6 @@ public sealed class IssueService(
         AssignIssueRequest request,
         CancellationToken cancellationToken)
     {
-        var access = await RequireIssueManagerAsync(organizationId, cancellationToken);
-        if (access != IssueFailure.None)
-        {
-            return Failure<IssueResponse>(access);
-        }
-
         var issue = await dbContext.Issues.FirstOrDefaultAsync(
             issue => issue.OrganizationId == organizationId && issue.Id == issueId,
             cancellationToken);
@@ -194,12 +162,6 @@ public sealed class IssueService(
         ChangeIssueStatusRequest request,
         CancellationToken cancellationToken)
     {
-        var access = await organizationAccess.RequireMembershipAsync(organizationId, cancellationToken);
-        if (!access.IsAllowed)
-        {
-            return Failure<IssueResponse>(ToIssueFailure(access.Status));
-        }
-
         var validation = await changeStatusValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
@@ -215,8 +177,9 @@ public sealed class IssueService(
             return Failure<IssueResponse>(IssueFailure.NotFound);
         }
 
-        if (!IssueAccessPolicy.CanManageIssues(access.Membership!.Role) &&
-            !IssueAccessPolicy.CanAssignedDeveloperChangeStatus(access.Membership, issue.AssigneeId))
+        var membership = organizationContext.Membership;
+        if (!IssueAccessPolicy.CanManageIssues(membership.Role) &&
+            !IssueAccessPolicy.CanAssignedDeveloperChangeStatus(membership, issue.AssigneeId))
         {
             return Failure<IssueResponse>(IssueFailure.Forbidden);
         }
@@ -233,12 +196,6 @@ public sealed class IssueService(
         ChangeIssuePriorityRequest request,
         CancellationToken cancellationToken)
     {
-        var access = await RequireIssueManagerAsync(organizationId, cancellationToken);
-        if (access != IssueFailure.None)
-        {
-            return Failure<IssueResponse>(access);
-        }
-
         var validation = await changePriorityValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
@@ -266,12 +223,6 @@ public sealed class IssueService(
         SetIssueDueDateRequest request,
         CancellationToken cancellationToken)
     {
-        var access = await RequireIssueManagerAsync(organizationId, cancellationToken);
-        if (access != IssueFailure.None)
-        {
-            return Failure<IssueResponse>(access);
-        }
-
         var issue = await dbContext.Issues.FirstOrDefaultAsync(
             issue => issue.OrganizationId == organizationId && issue.Id == issueId,
             cancellationToken);
@@ -298,15 +249,6 @@ public sealed class IssueService(
             : Success(response);
     }
 
-    private async Task<IssueFailure> RequireIssueManagerAsync(Guid organizationId, CancellationToken cancellationToken)
-    {
-        var access = await organizationAccess.RequireAnyRoleAsync(
-            organizationId,
-            OrganizationRolePolicies.ProjectManagement,
-            cancellationToken);
-        return access.IsAllowed ? IssueFailure.None : ToIssueFailure(access.Status);
-    }
-
     private async Task<bool> IsOrganizationMemberAsync(
         Guid organizationId,
         Guid memberId,
@@ -314,17 +256,6 @@ public sealed class IssueService(
         await dbContext.OrganizationMembers.AnyAsync(
             member => member.OrganizationId == organizationId && member.Id == memberId,
             cancellationToken);
-
-    private static IssueFailure ToIssueFailure(OrganizationAccessStatus status)
-    {
-        return status switch
-        {
-            OrganizationAccessStatus.Unauthorized => IssueFailure.Unauthorized,
-            OrganizationAccessStatus.NotFound => IssueFailure.NotFound,
-            OrganizationAccessStatus.Forbidden => IssueFailure.Forbidden,
-            _ => IssueFailure.None
-        };
-    }
 
     private static ServiceResult<T, IssueFailure> Success<T>(T value) =>
         ServiceResult<T, IssueFailure>.Success(value, IssueFailure.None);
