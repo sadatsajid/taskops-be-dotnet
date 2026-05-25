@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
-using TaskOps.Api.Features;
+using TaskOps.Api.Modules;
 using TaskOps.Api.Shared.Security;
 
 namespace TaskOps.Api.Infrastructure;
@@ -25,7 +25,7 @@ public static class DependencyInjection
         services.ConfigureOptions<JwtBearerOptionsSetup>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IOrganizationAccessService, OrganizationAccessService>();
-        services.AddTaskOpsFeatures();
+        services.AddTaskOpsModules();
 
         services.AddOptions<JwtOptions>()
             .Bind(configuration.GetSection(JwtOptions.SectionName))

@@ -17,8 +17,8 @@
 
 ```text
 src/
-  TaskOps.Api/          # Web API, feature slices, persistence, infrastructure
-    Features/           # Auth, Organizations, System, and future product slices
+  TaskOps.Api/          # Web API, modules, persistence, infrastructure
+    Modules/            # Identity, Organizations, Projects, Issues, System
     Shared/             # Shared API envelopes/results and security helpers
 tests/
   TaskOps.Api.Tests/    # PostgreSQL-backed integration tests

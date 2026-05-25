@@ -22,9 +22,11 @@ This repository is intentionally still a single ASP.NET Core API project. Do not
 ```text
 src/
   TaskOps.Api/
-    Features/
-      Auth/
+    Modules/
+      Identity/
       Organizations/
+      Projects/
+      Issues/
       System/
     Infrastructure/
     Persistence/
@@ -40,12 +42,12 @@ docs/
 TaskOps_Project_Roadmap.md
 ```
 
-Feature code belongs in `src/TaskOps.Api/Features/<FeatureName>`. Startup and cross-cutting wiring belongs in extension methods under `Infrastructure` or the relevant slice.
+Product behavior belongs in `src/TaskOps.Api/Modules/<ModuleName>`. Startup and cross-cutting wiring belongs in extension methods under `Infrastructure` or the relevant module.
 
 ## Design Rules
 
 - Keep `Program.cs` small. Prefer focused registration/middleware extension methods.
-- Keep feature service registration inside the relevant feature slice when practical; infrastructure composition should stay focused on platform wiring.
+- Keep module service registration inside the relevant module when practical; infrastructure composition should stay focused on platform wiring.
 - Use EF Core directly through `TaskOpsDbContext`; do not add repository abstractions by default.
 - Do not return EF entities from endpoints. Project into response DTOs.
 - Keep lazy loading off. Use explicit `Include` only when entity graphs are genuinely needed.
