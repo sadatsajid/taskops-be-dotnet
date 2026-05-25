@@ -41,6 +41,14 @@ Shared/
 - Refresh tokens are stored as SHA-256 hashes.
 - Refresh tokens are rotated on refresh and revoked on logout.
 
+## Organization Authorization
+
+- Organization access lives in `Modules/Organizations/Access`, owned by the Organizations module rather than `Shared/`.
+- Org-scoped endpoints declare one of three named policies: `Organization.Member`, `Organization.Owner`, `Organization.ProjectManagement`. Policies are registered by the Organizations module via `services.Configure<AuthorizationOptions>`.
+- A single `OrganizationMembershipHandler` reads `{organizationId}` from the route, resolves membership through `IOrganizationAccessService`, and on success stashes the `OrganizationMember` into a scoped `IOrganizationContext` that services can read when fine-grained role logic is needed (e.g. the assigned-developer status-change override in `IssueService`).
+- A custom `IAuthorizationMiddlewareResultHandler` preserves the API's three-way semantics: `401` for unauthenticated, `404` for authenticated non-member (no existence leak), `403` ProblemDetails for member-with-wrong-role.
+- Services no longer translate access status into module failure enums; the authorization pipeline short-circuits before the service runs.
+
 ## Testing
 
 The integration test project uses Testcontainers PostgreSQL. This is deliberate: persistence behavior should be tested against PostgreSQL, not EF Core's in-memory provider.

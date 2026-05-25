@@ -35,11 +35,15 @@ The API startup remains thin. `Program.cs` composes platform services, persisten
 - Do not introduce separate databases.
 - Prefer deliberate module-to-module contracts over casual cross-module data access.
 
+## Completed Since Phase 10
+
+- Organization access behavior now lives in `Modules/Organizations/Access` and is exposed through named ASP.NET authorization policies (`Organization.Member`, `Organization.Owner`, `Organization.ProjectManagement`). Endpoints declare the policy; services no longer carry per-method access boilerplate. See `architecture-notes.md` for the runtime contract.
+
 ## Next Evolution
 
 The next useful improvements are not more folders. They are stronger boundaries:
 
-- Move organization access behavior closer to the Organizations module.
+- Introduce a domain-event / outbox seam before Notifications is built, so Comments and activity logs share one mechanism.
 - Introduce Notifications, Files, and Dashboard as modules from birth.
 - Consider PostgreSQL schemas later only after ownership is stable.
 - Split into module projects only if compile-time boundaries become worth the extra project overhead.
