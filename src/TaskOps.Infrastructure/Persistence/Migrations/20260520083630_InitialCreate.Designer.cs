@@ -25,7 +25,7 @@ namespace TaskOps.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("TaskOps.Domain.Entities.Issue", b =>
+            modelBuilder.Entity("TaskOps.Domain.Modules.Issues.Issue", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -87,7 +87,7 @@ namespace TaskOps.Infrastructure.Persistence.Migrations
                     b.ToTable("Issues");
                 });
 
-            modelBuilder.Entity("TaskOps.Domain.Entities.Organization", b =>
+            modelBuilder.Entity("TaskOps.Domain.Modules.Organizations.Organization", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -117,7 +117,7 @@ namespace TaskOps.Infrastructure.Persistence.Migrations
                     b.ToTable("Organizations");
                 });
 
-            modelBuilder.Entity("TaskOps.Domain.Entities.OrganizationMember", b =>
+            modelBuilder.Entity("TaskOps.Domain.Modules.Organizations.OrganizationMember", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -153,7 +153,7 @@ namespace TaskOps.Infrastructure.Persistence.Migrations
                     b.ToTable("OrganizationMembers");
                 });
 
-            modelBuilder.Entity("TaskOps.Domain.Entities.Project", b =>
+            modelBuilder.Entity("TaskOps.Domain.Modules.Projects.Project", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -193,7 +193,7 @@ namespace TaskOps.Infrastructure.Persistence.Migrations
                     b.ToTable("Projects");
                 });
 
-            modelBuilder.Entity("TaskOps.Domain.Entities.User", b =>
+            modelBuilder.Entity("TaskOps.Domain.Modules.Identity.User", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -232,20 +232,20 @@ namespace TaskOps.Infrastructure.Persistence.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("TaskOps.Domain.Entities.Issue", b =>
+            modelBuilder.Entity("TaskOps.Domain.Modules.Issues.Issue", b =>
                 {
-                    b.HasOne("TaskOps.Domain.Entities.OrganizationMember", "Assignee")
+                    b.HasOne("TaskOps.Domain.Modules.Organizations.OrganizationMember", "Assignee")
                         .WithMany("AssignedIssues")
                         .HasForeignKey("AssigneeId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("TaskOps.Domain.Entities.Organization", "Organization")
+                    b.HasOne("TaskOps.Domain.Modules.Organizations.Organization", "Organization")
                         .WithMany()
                         .HasForeignKey("OrganizationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("TaskOps.Domain.Entities.Project", "Project")
+                    b.HasOne("TaskOps.Domain.Modules.Projects.Project", "Project")
                         .WithMany("Issues")
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -258,15 +258,15 @@ namespace TaskOps.Infrastructure.Persistence.Migrations
                     b.Navigation("Project");
                 });
 
-            modelBuilder.Entity("TaskOps.Domain.Entities.OrganizationMember", b =>
+            modelBuilder.Entity("TaskOps.Domain.Modules.Organizations.OrganizationMember", b =>
                 {
-                    b.HasOne("TaskOps.Domain.Entities.Organization", "Organization")
+                    b.HasOne("TaskOps.Domain.Modules.Organizations.Organization", "Organization")
                         .WithMany("Members")
                         .HasForeignKey("OrganizationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("TaskOps.Domain.Entities.User", "User")
+                    b.HasOne("TaskOps.Domain.Modules.Identity.User", "User")
                         .WithMany("OrganizationMemberships")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -277,9 +277,9 @@ namespace TaskOps.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("TaskOps.Domain.Entities.Project", b =>
+            modelBuilder.Entity("TaskOps.Domain.Modules.Projects.Project", b =>
                 {
-                    b.HasOne("TaskOps.Domain.Entities.Organization", "Organization")
+                    b.HasOne("TaskOps.Domain.Modules.Organizations.Organization", "Organization")
                         .WithMany("Projects")
                         .HasForeignKey("OrganizationId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -288,24 +288,24 @@ namespace TaskOps.Infrastructure.Persistence.Migrations
                     b.Navigation("Organization");
                 });
 
-            modelBuilder.Entity("TaskOps.Domain.Entities.Organization", b =>
+            modelBuilder.Entity("TaskOps.Domain.Modules.Organizations.Organization", b =>
                 {
                     b.Navigation("Members");
 
                     b.Navigation("Projects");
                 });
 
-            modelBuilder.Entity("TaskOps.Domain.Entities.OrganizationMember", b =>
+            modelBuilder.Entity("TaskOps.Domain.Modules.Organizations.OrganizationMember", b =>
                 {
                     b.Navigation("AssignedIssues");
                 });
 
-            modelBuilder.Entity("TaskOps.Domain.Entities.Project", b =>
+            modelBuilder.Entity("TaskOps.Domain.Modules.Projects.Project", b =>
                 {
                     b.Navigation("Issues");
                 });
 
-            modelBuilder.Entity("TaskOps.Domain.Entities.User", b =>
+            modelBuilder.Entity("TaskOps.Domain.Modules.Identity.User", b =>
                 {
                     b.Navigation("OrganizationMemberships");
                 });

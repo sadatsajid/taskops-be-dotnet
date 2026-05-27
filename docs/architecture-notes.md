@@ -1,6 +1,6 @@
 # Architecture Notes
 
-TaskOps has completed the Phase 9 boundary split. The codebase is now a small layered backend, not a modular monolith yet.
+TaskOps has completed the Phase 10 modular monolith boundary refactor. It remains one deployable API, one process, one database, and one `TaskOpsDbContext`, but product modules are now visible across API, Application, Domain, and Infrastructure.
 
 The intent is clean ownership without framework ceremony: no MediatR, no generic repositories, no interface-per-class layer.
 
@@ -9,23 +9,31 @@ The intent is clean ownership without framework ceremony: no MediatR, no generic
 ```text
 src/
   TaskOps.Api/
-    Features/          # Minimal API endpoint mapping
+    Modules/           # Minimal API endpoint mapping and org authorization policies
     Infrastructure/    # HTTP middleware, auth setup, OpenAPI
     Shared/Api/        # HTTP response envelope and endpoint result helpers
 
   TaskOps.Application/
-    Features/          # Contracts, validators, service interfaces, result types
-    Shared/Api/        # ServiceResult, pagination, validation helpers
-    Shared/Security/   # Current user and organization access abstractions
+    Modules/           # Contracts, validators, service interfaces, result types
+      Identity/
+      Organizations/
+        Access/        # Deliberate organization access contracts
+      Projects/
+      Issues/
+    SharedKernel/      # ServiceResult, pagination, current user abstraction
 
   TaskOps.Domain/
-    Entities/          # Durable business entities and enums
-    Security/          # Domain-level security rules such as scoped role policies
+    Modules/           # Durable business entities, enums, and module rules
+      Identity/
+      Organizations/
+      Projects/
+      Issues/
+    SharedKernel/      # Stable base mechanics such as AuditableEntity
 
   TaskOps.Infrastructure/
-    Features/          # EF-backed application service implementations
+    Modules/           # EF-backed module service implementations
     Persistence/       # DbContext, configurations, migrations, database startup
-    Security/          # JWT/token/signing and organization access implementations
+    Security/          # JWT signing options and key provider
 ```
 
 ## Rules
@@ -36,6 +44,7 @@ src/
 - Domain owns entities, enums, and durable business rules. It must not reference EF Core or ASP.NET Core.
 - EF Core is still used directly through `TaskOpsDbContext`; do not add repository abstractions.
 - Organization access must be scoped through membership checks, not global roles.
+- Cross-module access should be deliberate. Organization access contracts are exposed by the Organizations module; they are not generic shared helpers.
 - Keep startup code in `Program.cs` small; compose endpoint mapping through `MapTaskOpsEndpoints()`.
 
 ## Validation And API Contracts
@@ -52,6 +61,14 @@ src/
 - Organization roles are not embedded in access tokens.
 - Refresh tokens are stored as SHA-256 hashes.
 - Refresh tokens are rotated on refresh and revoked on logout.
+
+## Organization Authorization
+
+- Organization access lives in `Modules/Organizations/Access`, owned by the Organizations module rather than `Shared/`.
+- Org-scoped endpoints declare one of three named policies: `Organization.Member`, `Organization.Owner`, `Organization.ProjectManagement`. Policies are registered by the Organizations module via `services.Configure<AuthorizationOptions>`.
+- A single `OrganizationMembershipHandler` reads `{organizationId}` from the route, resolves membership through `IOrganizationAccessService`, and on success stashes the `OrganizationMember` into a scoped `IOrganizationContext` that services can read when fine-grained role logic is needed (e.g. the assigned-developer status-change override in `IssueService`).
+- A custom `IAuthorizationMiddlewareResultHandler` preserves the API's three-way semantics: `401` for unauthenticated, `404` for authenticated non-member (no existence leak), `403` ProblemDetails for member-with-wrong-role.
+- Services no longer translate access status into module failure enums; the authorization pipeline short-circuits before the service runs.
 
 ## Testing
 

@@ -1,5 +1,6 @@
 using System.Security.Claims;
-using TaskOps.Application.Shared.Security;
+using TaskOps.Application.Modules.Organizations.Access;
+using TaskOps.Application.SharedKernel.Security;
 
 namespace TaskOps.Api.Infrastructure;
 

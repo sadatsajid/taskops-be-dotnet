@@ -17,10 +17,10 @@
 
 ```text
 src/
-  TaskOps.Api/             # Minimal API endpoints, middleware, auth setup, OpenAPI
-  TaskOps.Application/     # Contracts, validators, service interfaces, result types
-  TaskOps.Domain/          # Entities, enums, durable business/security rules
-  TaskOps.Infrastructure/  # EF Core, PostgreSQL, migrations, concrete services
+  TaskOps.Api/             # Module endpoints, HTTP middleware, org authorization, OpenAPI
+  TaskOps.Application/     # Module contracts, validators, service interfaces, result types
+  TaskOps.Domain/          # Module entities, enums, durable business/security rules
+  TaskOps.Infrastructure/  # Module implementations, EF Core, PostgreSQL, migrations
 tests/
   TaskOps.Api.Tests/    # PostgreSQL-backed integration tests
 docs/                   # Setup and phase notes (e.g. phase-0-setup.md)

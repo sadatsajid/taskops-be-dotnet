@@ -2,7 +2,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
-using TaskOps.Domain.Entities;
+using TaskOps.Domain.Modules.Identity;
+using TaskOps.Domain.Modules.Issues;
+using TaskOps.Domain.Modules.Organizations;
+using TaskOps.Domain.Modules.Projects;
 
 namespace TaskOps.Infrastructure.Persistence;
 

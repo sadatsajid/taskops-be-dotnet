@@ -1,4 +1,4 @@
-using TaskOps.Application.Shared.Api;
+using TaskOps.Application.SharedKernel.Api;
 
 namespace TaskOps.Api.Shared.Api;
 

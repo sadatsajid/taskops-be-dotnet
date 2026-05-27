@@ -17,37 +17,43 @@ Do not model authorization as global user roles unless the roadmap explicitly ch
 
 ## Current Architecture
 
-This repository has completed the Phase 9 boundary split from the roadmap. It is still intentionally pragmatic: do not add MediatR, generic repositories, interface-per-class layers, or microservices without an explicit request.
+This repository has completed the Phase 10 modular monolith boundary refactor from the roadmap. It is still intentionally pragmatic: do not add MediatR, generic repositories, interface-per-class layers, project-per-module ceremony, or microservices without an explicit request.
 
 ```text
 src/
   TaskOps.Api/
-    Features/
-      Auth/
-      Issues/
+    Modules/
+      Identity/
       Organizations/
       Projects/
+      Issues/
       System/
     Infrastructure/
     Shared/
       Api/
   TaskOps.Application/
-    Features/
-      Auth/
+    Modules/
+      Identity/
       Issues/
       Organizations/
+        Access/
       Projects/
-    Shared/
+    SharedKernel/
       Api/
       Security/
   TaskOps.Domain/
-    Entities/
-    Security/
-  TaskOps.Infrastructure/
-    Features/
-      Auth/
+    Modules/
+      Identity/
       Issues/
       Organizations/
+      Projects/
+    SharedKernel/
+  TaskOps.Infrastructure/
+    Modules/
+      Identity/
+      Issues/
+      Organizations/
+        Access/
       Projects/
     Persistence/
       Configurations/
@@ -59,12 +65,12 @@ docs/
 TaskOps_Project_Roadmap.md
 ```
 
-Endpoint code belongs in `src/TaskOps.Api/Features/<FeatureName>`. Request/response contracts, validators, service interfaces, and result types belong in `TaskOps.Application`. EF Core-backed implementations belong in `TaskOps.Infrastructure`. Domain entities and durable rules belong in `TaskOps.Domain`.
+HTTP endpoints and organization authorization policies belong in `src/TaskOps.Api/Modules/<ModuleName>`. Request/response contracts, validators, service interfaces, and result types belong in `src/TaskOps.Application/Modules/<ModuleName>`. Organization access contracts belong in `src/TaskOps.Application/Modules/Organizations/Access`. EF Core-backed implementations belong in `src/TaskOps.Infrastructure/Modules/<ModuleName>`. Domain entities and durable rules belong in `src/TaskOps.Domain/Modules/<ModuleName>`. Only stable mechanics belong in `SharedKernel`.
 
 ## Design Rules
 
 - Keep `Program.cs` small. Prefer focused registration/middleware extension methods.
-- Keep feature service registration in infrastructure composition when services need EF Core or external mechanics.
+- Keep module endpoint mapping in `TaskOps.Api`; register application services in `TaskOps.Infrastructure` and organization authorization in `AddTaskOpsModules()`.
 - Use EF Core directly through `TaskOpsDbContext`; do not add repository abstractions by default.
 - Do not return EF entities from endpoints. Project into response DTOs.
 - Keep lazy loading off. Use explicit `Include` only when entity graphs are genuinely needed.

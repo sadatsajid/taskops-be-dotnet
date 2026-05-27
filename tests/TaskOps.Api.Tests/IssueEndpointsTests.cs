@@ -1,8 +1,10 @@
 using FluentAssertions;
 using System.Net;
 using System.Net.Http.Json;
-using TaskOps.Application.Features.Issues;
-using TaskOps.Application.Shared.Api;
+using TaskOps.Api.Modules.Issues;
+using TaskOps.Api.Shared.Api;
+using TaskOps.Application.Modules.Issues;
+using TaskOps.Application.SharedKernel.Api;
 using TaskOps.Api.Tests.Infrastructure;
 
 namespace TaskOps.Api.Tests;

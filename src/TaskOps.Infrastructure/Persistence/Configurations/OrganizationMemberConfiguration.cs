@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using TaskOps.Domain.Entities;
+using TaskOps.Domain.Modules.Organizations;
 
 namespace TaskOps.Infrastructure.Persistence.Configurations;
 
