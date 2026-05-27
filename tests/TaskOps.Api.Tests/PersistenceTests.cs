@@ -1,8 +1,12 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using TaskOps.Api.Persistence;
-using TaskOps.Api.Persistence.Entities;
+using TaskOps.Infrastructure.Persistence;
+using TaskOps.Domain.Modules.Identity;
+using TaskOps.Domain.Modules.Issues;
+using TaskOps.Domain.Modules.Organizations;
+using TaskOps.Domain.Modules.Projects;
+using TaskOps.Domain.SharedKernel;
 using TaskOps.Api.Tests.Infrastructure;
 
 namespace TaskOps.Api.Tests;

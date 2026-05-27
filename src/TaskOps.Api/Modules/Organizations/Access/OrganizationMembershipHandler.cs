@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using TaskOps.Application.Modules.Organizations.Access;
 
 namespace TaskOps.Api.Modules.Organizations.Access;
 

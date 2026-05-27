@@ -4,9 +4,15 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Net;
 using System.Net.Http.Json;
 using TaskOps.Api.Modules.Organizations;
-using TaskOps.Api.Persistence;
-using TaskOps.Api.Persistence.Entities;
 using TaskOps.Api.Shared.Api;
+using TaskOps.Application.Modules.Organizations;
+using TaskOps.Infrastructure.Persistence;
+using TaskOps.Domain.Modules.Identity;
+using TaskOps.Domain.Modules.Issues;
+using TaskOps.Domain.Modules.Organizations;
+using TaskOps.Domain.Modules.Projects;
+using TaskOps.Domain.SharedKernel;
+using TaskOps.Application.SharedKernel.Api;
 using TaskOps.Api.Tests.Infrastructure;
 
 namespace TaskOps.Api.Tests;

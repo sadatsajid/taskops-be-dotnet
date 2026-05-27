@@ -562,6 +562,71 @@ Usually bad abstractions:
 
 Adopt Solution 3: a modular monolith with clear product boundaries.
 
+For this learning project, Phase 10 is not optional polish. It is the next
+architectural lesson after the Phase 9 boundary split:
+
+> Business boundaries eventually matter more than technical layers.
+
+The goal is to learn modularity without paying the cost of distributed systems.
+TaskOps should remain one deployable application, one process, one database,
+and initially one `TaskOpsDbContext`.
+
+### What Modular Monolith Means Here
+
+A modular monolith is a single application organized around product modules
+with deliberate boundaries between them.
+
+It is still a monolith:
+
+- One API host
+- One deployment unit
+- One database
+- One local transaction boundary
+- One operational surface
+
+It is modular because feature work should mostly stay inside one product area:
+
+- Identity owns authentication and token behavior.
+- Organizations owns membership and organization-level access rules.
+- Projects owns project lifecycle and project-scoped behavior.
+- Issues owns issue lifecycle, queries, numbering, assignment, and status rules.
+- Notifications owns notification use cases when they are introduced.
+- Files owns attachment behavior when it is introduced.
+- Dashboard owns read models and summaries when they are introduced.
+
+This is not a move to microservices. Do not split into separate services,
+separate databases, message buses, or network calls between modules.
+
+### Current-To-Target Difference
+
+After Phase 9, TaskOps is primarily organized by technical layer:
+
+```text
+TaskOps.Api
+TaskOps.Application
+TaskOps.Domain
+TaskOps.Infrastructure
+```
+
+Phase 10 should make product modules more visible and harder to violate.
+The architecture should start answering:
+
+> Can I change Issues without mentally loading the entire system?
+
+If the answer becomes mostly yes, Phase 10 is working.
+
+Do this incrementally inside the existing solution structure. Do not create a
+large project-per-module structure yet unless module boundaries become painful
+to enforce with folders, naming, tests, and dependency direction.
+
+### Timing
+
+Do Phase 10 before Comments and Activity Logs.
+
+Comments and activity logs naturally touch Issues, Identity, Projects, and
+Organizations, so they are a good pressure test for whether module boundaries
+are real or only decorative.
+
 ### Modules
 
 Create module boundaries around:
@@ -583,6 +648,11 @@ Create module boundaries around:
 - Authorization checks relevant to the module
 - Internal domain behavior
 
+Module ownership means other modules should not casually reach into internal
+implementation details. Cross-module access should happen through deliberate
+contracts, narrowly scoped shared abstractions, or explicit queries where the
+dependency is justified.
+
 ### Shared Kernel
 
 Keep shared kernel tiny.
@@ -603,6 +673,10 @@ Dangerous shared concepts:
 - Cross-module service soup
 - Base repository classes
 
+The shared kernel exists to prevent duplication of stable mechanics, not to
+become a dumping ground for convenience code. If a rule belongs to one product
+area, keep it in that module.
+
 ### Database Strategy
 
 Start with one database and one `DbContext`.
@@ -620,12 +694,32 @@ notification.Notifications
 
 Do not use separate databases.
 
+Do not add repositories over EF Core as part of this phase. EF Core is already
+the unit-of-work and query abstraction. Add a separate abstraction only for
+external capabilities such as email, files, time, current user, or token
+generation.
+
+### Non-Goals
+
+Do not use Phase 10 to add:
+
+- Microservices
+- MediatR
+- Generic repositories
+- Interface-per-class structure
+- Separate databases
+- Message buses between local modules
+- A large enterprise template
+- Project-per-module structure before folder boundaries have failed
+
 ### Exit Criteria
 
 - Modules are visible in folder structure
 - Cross-module access is deliberate
 - Shared code is small
 - Feature work mostly stays inside one module
+- Organization-scoped authorization remains explicit inside affected modules
+- Tests still prove membership-scoped access for organization and project data
 
 ## Phase 11: Comments And Activity Logs
 
@@ -1098,7 +1192,7 @@ Do not:
 10. Auth hardening
 11. Integration tests
 12. Refactor into cleaner boundaries
-13. Modular monolith structure
+13. Learning-focused modular monolith boundary refactor
 14. Comments
 15. Activity logs
 16. Notifications
@@ -1125,4 +1219,10 @@ The most important reason:
 
 > You need working product behavior before architecture has anything honest to organize.
 
-Start simple, but not sloppy. Add structure when the pain becomes real, not when a template tells you to.
+Start simple, but not sloppy. Add structure when the pain becomes real, not when
+a template tells you to.
+
+For this learning project, follow Phase 10 once Phase 9 is complete. Keep it as
+a modular-monolith refactor inside the existing application, not a jump to
+microservices or enterprise ceremony. The primary lesson is modularity without
+distributed-system complexity.

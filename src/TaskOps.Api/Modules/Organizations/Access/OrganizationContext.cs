@@ -1,4 +1,5 @@
-using TaskOps.Api.Persistence.Entities;
+using TaskOps.Application.Modules.Organizations.Access;
+using TaskOps.Domain.Modules.Organizations;
 
 namespace TaskOps.Api.Modules.Organizations.Access;
 

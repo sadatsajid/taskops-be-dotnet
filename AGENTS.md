@@ -17,7 +17,7 @@ Do not model authorization as global user roles unless the roadmap explicitly ch
 
 ## Current Architecture
 
-This repository is intentionally still a single ASP.NET Core API project. Do not split it into Clean Architecture projects, MediatR handlers, generic repositories, or microservices without an explicit request.
+This repository has completed the Phase 10 modular monolith boundary refactor from the roadmap. It is still intentionally pragmatic: do not add MediatR, generic repositories, interface-per-class layers, project-per-module ceremony, or microservices without an explicit request.
 
 ```text
 src/
@@ -29,29 +29,54 @@ src/
       Issues/
       System/
     Infrastructure/
-    Persistence/
-      Configurations/
-      Entities/
-      Migrations/
     Shared/
       Api/
+  TaskOps.Application/
+    Modules/
+      Identity/
+      Issues/
+      Organizations/
+        Access/
+      Projects/
+    SharedKernel/
+      Api/
       Security/
+  TaskOps.Domain/
+    Modules/
+      Identity/
+      Issues/
+      Organizations/
+      Projects/
+    SharedKernel/
+  TaskOps.Infrastructure/
+    Modules/
+      Identity/
+      Issues/
+      Organizations/
+        Access/
+      Projects/
+    Persistence/
+      Configurations/
+      Migrations/
+    Security/
 tests/
   TaskOps.Api.Tests/
 docs/
 TaskOps_Project_Roadmap.md
 ```
 
-Product behavior belongs in `src/TaskOps.Api/Modules/<ModuleName>`. Startup and cross-cutting wiring belongs in extension methods under `Infrastructure` or the relevant module.
+HTTP endpoints and organization authorization policies belong in `src/TaskOps.Api/Modules/<ModuleName>`. Request/response contracts, validators, service interfaces, and result types belong in `src/TaskOps.Application/Modules/<ModuleName>`. Organization access contracts belong in `src/TaskOps.Application/Modules/Organizations/Access`. EF Core-backed implementations belong in `src/TaskOps.Infrastructure/Modules/<ModuleName>`. Domain entities and durable rules belong in `src/TaskOps.Domain/Modules/<ModuleName>`. Only stable mechanics belong in `SharedKernel`.
 
 ## Design Rules
 
 - Keep `Program.cs` small. Prefer focused registration/middleware extension methods.
-- Keep module service registration inside the relevant module when practical; infrastructure composition should stay focused on platform wiring.
+- Keep module endpoint mapping in `TaskOps.Api`; register application services in `TaskOps.Infrastructure` and organization authorization in `AddTaskOpsModules()`.
 - Use EF Core directly through `TaskOpsDbContext`; do not add repository abstractions by default.
 - Do not return EF entities from endpoints. Project into response DTOs.
 - Keep lazy loading off. Use explicit `Include` only when entity graphs are genuinely needed.
-- Put entity configuration in `Persistence/Configurations`.
+- Put entity configuration in `src/TaskOps.Infrastructure/Persistence/Configurations`.
+- Keep `TaskOps.Domain` free of EF Core, ASP.NET Core, JWT, Swagger, and PostgreSQL-specific dependencies.
+- Keep `TaskOps.Application` free of endpoint and middleware concerns.
 - Treat PostgreSQL behavior as real behavior. Do not use EF Core in-memory provider for persistence tests.
 - Organization and project access checks must be scoped by membership.
 - Organization access helpers should return explicit outcomes (`Unauthorized`, `NotFound`, `Forbidden`, allowed membership) instead of ambiguous nullable membership checks.
@@ -130,7 +155,7 @@ Use the local tool manifest from the repo root:
 
 ```bash
 dotnet tool run dotnet-ef migrations add <MigrationName> \
-  --project src/TaskOps.Api/TaskOps.Api.csproj \
+  --project src/TaskOps.Infrastructure/TaskOps.Infrastructure.csproj \
   --startup-project src/TaskOps.Api/TaskOps.Api.csproj \
   --output-dir Persistence/Migrations
 ```
@@ -139,7 +164,7 @@ Manual database update:
 
 ```bash
 dotnet tool run dotnet-ef database update \
-  --project src/TaskOps.Api/TaskOps.Api.csproj \
+  --project src/TaskOps.Infrastructure/TaskOps.Infrastructure.csproj \
   --startup-project src/TaskOps.Api/TaskOps.Api.csproj
 ```
 

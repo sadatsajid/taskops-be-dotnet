@@ -1,6 +1,6 @@
 # TaskOps
 
-**TaskOps** is a project-management and issue-tracking backend built to learn the .NET ecosystem. It is intentionally pragmatic: start as a single ASP.NET Core API and evolve toward a modular monolith with real-world concerns (auth, tenancy, validation, tests, observability, and deployment).
+**TaskOps** is a project-management and issue-tracking backend built to learn the .NET ecosystem. It is intentionally pragmatic: start simple, evolve through clean boundaries, and move toward a modular monolith only when the product pressure justifies it.
 
 ## Tech stack
 
@@ -17,9 +17,10 @@
 
 ```text
 src/
-  TaskOps.Api/          # Web API, modules, persistence, infrastructure
-    Modules/            # Identity, Organizations, Projects, Issues, System
-    Shared/             # Shared API envelopes/results and security helpers
+  TaskOps.Api/             # Module endpoints, HTTP middleware, org authorization, OpenAPI
+  TaskOps.Application/     # Module contracts, validators, service interfaces, result types
+  TaskOps.Domain/          # Module entities, enums, durable business/security rules
+  TaskOps.Infrastructure/  # Module implementations, EF Core, PostgreSQL, migrations
 tests/
   TaskOps.Api.Tests/    # PostgreSQL-backed integration tests
 docs/                   # Setup and phase notes (e.g. phase-0-setup.md)
@@ -93,7 +94,7 @@ Development settings enable applying EF Core migrations and optional seeding on 
 
 ```bash
 dotnet tool run dotnet-ef migrations add <Name> \
-  --project src/TaskOps.Api/TaskOps.Api.csproj \
+  --project src/TaskOps.Infrastructure/TaskOps.Infrastructure.csproj \
   --startup-project src/TaskOps.Api/TaskOps.Api.csproj \
   --output-dir Persistence/Migrations
 ```

@@ -1,7 +1,8 @@
-using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using TaskOps.Api.Modules.Organizations.Access;
+using TaskOps.Application.Modules.Organizations.Access;
+using TaskOps.Domain.Modules.Organizations;
 
 namespace TaskOps.Api.Modules.Organizations;
 
@@ -9,13 +10,6 @@ public static class OrganizationDependencyInjection
 {
     public static IServiceCollection AddOrganizationModule(this IServiceCollection services)
     {
-        services.AddScoped<IOrganizationService, OrganizationService>();
-        services.AddScoped<IValidator<CreateOrganizationRequest>, CreateOrganizationRequestValidator>();
-        services.AddScoped<IValidator<UpdateOrganizationRequest>, UpdateOrganizationRequestValidator>();
-        services.AddScoped<IValidator<AddOrganizationMemberRequest>, AddOrganizationMemberRequestValidator>();
-        services.AddScoped<IValidator<ChangeOrganizationMemberRoleRequest>, ChangeOrganizationMemberRoleRequestValidator>();
-
-        services.AddScoped<IOrganizationAccessService, OrganizationAccessService>();
         services.AddScoped<OrganizationContext>();
         services.AddScoped<IOrganizationContext>(sp => sp.GetRequiredService<OrganizationContext>());
         services.AddScoped<IOrganizationContextAccessor>(sp => sp.GetRequiredService<OrganizationContext>());

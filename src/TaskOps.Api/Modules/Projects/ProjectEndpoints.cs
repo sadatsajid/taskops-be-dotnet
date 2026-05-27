@@ -1,4 +1,6 @@
 using TaskOps.Api.Modules.Organizations.Access;
+using TaskOps.Application.Modules.Projects;
+using TaskOps.Application.SharedKernel.Api;
 using TaskOps.Api.Shared.Api;
 
 namespace TaskOps.Api.Modules.Projects;

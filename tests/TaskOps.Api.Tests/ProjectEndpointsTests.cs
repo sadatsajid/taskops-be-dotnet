@@ -3,6 +3,8 @@ using System.Net;
 using System.Net.Http.Json;
 using TaskOps.Api.Modules.Projects;
 using TaskOps.Api.Shared.Api;
+using TaskOps.Application.Modules.Projects;
+using TaskOps.Application.SharedKernel.Api;
 using TaskOps.Api.Tests.Infrastructure;
 
 namespace TaskOps.Api.Tests;

@@ -1,5 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
-using TaskOps.Api.Persistence.Entities;
+using TaskOps.Domain.Modules.Identity;
+using TaskOps.Domain.Modules.Issues;
+using TaskOps.Domain.Modules.Organizations;
+using TaskOps.Domain.Modules.Projects;
+using TaskOps.Domain.SharedKernel;
 
 namespace TaskOps.Api.Modules.Organizations.Access;
 

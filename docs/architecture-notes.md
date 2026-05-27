@@ -1,34 +1,55 @@
 # Architecture Notes
 
-TaskOps is intentionally still one ASP.NET Core API project. The structure now follows a modular-monolith style inside that single deployable API without introducing Clean Architecture ceremony, MediatR, generic repositories, or module projects too early.
+TaskOps has completed the Phase 10 modular monolith boundary refactor. It remains one deployable API, one process, one database, and one `TaskOpsDbContext`, but product modules are now visible across API, Application, Domain, and Infrastructure.
+
+The intent is clean ownership without framework ceremony: no MediatR, no generic repositories, no interface-per-class layer.
 
 ## Current Shape
 
 ```text
-Modules/
-  Identity/
-  Organizations/
-  Projects/
-  Issues/
-  System/
-Infrastructure/
-Persistence/
-Shared/
+src/
+  TaskOps.Api/
+    Modules/           # Minimal API endpoint mapping and org authorization policies
+    Infrastructure/    # HTTP middleware, auth setup, OpenAPI
+    Shared/Api/        # HTTP response envelope and endpoint result helpers
+
+  TaskOps.Application/
+    Modules/           # Contracts, validators, service interfaces, result types
+      Identity/
+      Organizations/
+        Access/        # Deliberate organization access contracts
+      Projects/
+      Issues/
+    SharedKernel/      # ServiceResult, pagination, current user abstraction
+
+  TaskOps.Domain/
+    Modules/           # Durable business entities, enums, and module rules
+      Identity/
+      Organizations/
+      Projects/
+      Issues/
+    SharedKernel/      # Stable base mechanics such as AuditableEntity
+
+  TaskOps.Infrastructure/
+    Modules/           # EF-backed module service implementations
+    Persistence/       # DbContext, configurations, migrations, database startup
+    Security/          # JWT signing options and key provider
 ```
 
 ## Rules
 
-- New product behavior should start inside `Modules/<ModuleName>`.
-- Modules own request DTOs, response DTOs, endpoint mapping, validators, authorization checks relevant to the module, and handler logic.
-- EF Core is used directly through `TaskOpsDbContext`.
-- Do not expose EF entities as API responses.
+- API endpoints stay thin: bind HTTP inputs, call application services, translate failures to HTTP.
+- Application owns request/response DTOs, validators, service interfaces, and expected failure shapes.
+- Infrastructure owns EF Core, PostgreSQL behavior, JWT token creation, and concrete service implementations.
+- Domain owns entities, enums, and durable business rules. It must not reference EF Core or ASP.NET Core.
+- EF Core is still used directly through `TaskOpsDbContext`; do not add repository abstractions.
 - Organization access must be scoped through membership checks, not global roles.
-- Keep startup code in `Program.cs` small; compose module endpoint mapping through `MapTaskOpsEndpoints()`.
-- Keep infrastructure registration focused on platform wiring; compose module services through `AddTaskOpsModules()`.
+- Cross-module access should be deliberate. Organization access contracts are exposed by the Organizations module; they are not generic shared helpers.
+- Keep startup code in `Program.cs` small; compose endpoint mapping through `MapTaskOpsEndpoints()`.
 
 ## Validation And API Contracts
 
-- Request DTOs are validated with module-local FluentValidation validators.
+- Request DTOs are validated with FluentValidation validators in `TaskOps.Application`.
 - Validators handle request shape only: required fields, lengths, enum names, date ranges, and similar API contract rules.
 - Services remain responsible for business rules that require state or authorization, such as duplicate natural keys, organization membership, project ownership, archived projects, and issue assignment rules.
 - Validation failures are returned through the shared validation result path as `400` ProblemDetails responses.
