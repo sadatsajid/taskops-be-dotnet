@@ -1,12 +1,13 @@
 using TaskOps.Api.Features;
 using TaskOps.Api.Infrastructure;
-using TaskOps.Api.Persistence;
+using TaskOps.Infrastructure;
+using TaskOps.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services
     .AddTaskOpsApi(builder.Configuration)
-    .AddTaskOpsPersistence(builder.Configuration)
+    .AddTaskOpsInfrastructure(builder.Configuration)
     .AddTaskOpsOpenApi();
 
 var app = builder.Build();

@@ -1,9 +1,9 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using TaskOps.Api.Features.Auth;
-using TaskOps.Api.Features.Issues;
-using TaskOps.Api.Features.Organizations;
-using TaskOps.Api.Features.Projects;
+using TaskOps.Application.Features.Auth;
+using TaskOps.Application.Features.Issues;
+using TaskOps.Application.Features.Organizations;
+using TaskOps.Application.Features.Projects;
 
 namespace TaskOps.Api.Tests.Infrastructure;
 

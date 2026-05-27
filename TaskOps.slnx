@@ -1,6 +1,9 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/TaskOps.Api/TaskOps.Api.csproj" />
+    <Project Path="src/TaskOps.Application/TaskOps.Application.csproj" />
+    <Project Path="src/TaskOps.Domain/TaskOps.Domain.csproj" />
+    <Project Path="src/TaskOps.Infrastructure/TaskOps.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TaskOps.Api.Tests/TaskOps.Api.Tests.csproj" />

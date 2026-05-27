@@ -1,3 +1,5 @@
+using TaskOps.Application.Features.Auth;
+using TaskOps.Application.Shared.Api;
 using TaskOps.Api.Shared.Api;
 
 namespace TaskOps.Api.Features.Auth;

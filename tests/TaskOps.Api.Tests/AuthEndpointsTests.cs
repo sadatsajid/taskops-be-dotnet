@@ -1,7 +1,7 @@
 using FluentAssertions;
 using System.Net;
 using System.Net.Http.Json;
-using TaskOps.Api.Features.Auth;
+using TaskOps.Application.Features.Auth;
 using TaskOps.Api.Tests.Infrastructure;
 
 namespace TaskOps.Api.Tests;
