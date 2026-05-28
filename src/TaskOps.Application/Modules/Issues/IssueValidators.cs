@@ -97,3 +97,25 @@ public sealed class ChangeIssuePriorityRequestValidator : AbstractValidator<Chan
             .OverridePropertyName("priority");
     }
 }
+
+public sealed class CreateIssueCommentRequestValidator : AbstractValidator<CreateIssueCommentRequest>
+{
+    public CreateIssueCommentRequestValidator()
+    {
+        RuleFor(request => request.Body)
+            .Must(IssueValidation.IsValidCommentBody)
+            .WithMessage($"Body must be between 1 and {IssueValidation.MaxCommentBodyLength} characters.")
+            .OverridePropertyName("body");
+    }
+}
+
+public sealed class UpdateIssueCommentRequestValidator : AbstractValidator<UpdateIssueCommentRequest>
+{
+    public UpdateIssueCommentRequestValidator()
+    {
+        RuleFor(request => request.Body)
+            .Must(IssueValidation.IsValidCommentBody)
+            .WithMessage($"Body must be between 1 and {IssueValidation.MaxCommentBodyLength} characters.")
+            .OverridePropertyName("body");
+    }
+}

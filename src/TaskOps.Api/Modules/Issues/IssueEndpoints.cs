@@ -44,6 +44,26 @@ public static class IssueEndpoints
             .WithName("SetIssueDueDate")
             .RequireAuthorization(OrganizationPolicies.ProjectManagement);
 
+        group.MapGet("/{issueId:guid}/comments", ListIssueCommentsAsync)
+            .WithName("ListIssueComments")
+            .RequireAuthorization(OrganizationPolicies.Member);
+
+        group.MapPost("/{issueId:guid}/comments", CreateIssueCommentAsync)
+            .WithName("CreateIssueComment")
+            .RequireAuthorization(OrganizationPolicies.Member);
+
+        group.MapPut("/{issueId:guid}/comments/{commentId:guid}", UpdateIssueCommentAsync)
+            .WithName("UpdateIssueComment")
+            .RequireAuthorization(OrganizationPolicies.Member);
+
+        group.MapDelete("/{issueId:guid}/comments/{commentId:guid}", DeleteIssueCommentAsync)
+            .WithName("DeleteIssueComment")
+            .RequireAuthorization(OrganizationPolicies.Member);
+
+        group.MapGet("/{issueId:guid}/activity", ListIssueActivityAsync)
+            .WithName("ListIssueActivity")
+            .RequireAuthorization(OrganizationPolicies.Member);
+
         return endpoints;
     }
 
@@ -172,13 +192,84 @@ public static class IssueEndpoints
         return EndpointResults.OkOrFailure(result, IssueFailure.None, httpContext, ToFailureResult);
     }
 
+    private static async Task<IResult> ListIssueCommentsAsync(
+        Guid organizationId,
+        Guid issueId,
+        [AsParameters] PageRequest page,
+        IIssueService issueService,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var result = await issueService.ListIssueCommentsAsync(organizationId, issueId, page, cancellationToken);
+        return EndpointResults.OkOrFailure(result, IssueFailure.None, httpContext, ToFailureResult);
+    }
+
+    private static async Task<IResult> CreateIssueCommentAsync(
+        Guid organizationId,
+        Guid issueId,
+        CreateIssueCommentRequest request,
+        IIssueService issueService,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var result = await issueService.CreateIssueCommentAsync(organizationId, issueId, request, cancellationToken);
+
+        return EndpointResults.CreatedOrFailure(
+            result,
+            IssueFailure.None,
+            comment => $"/api/organizations/{organizationId}/issues/{issueId}/comments/{comment.Id}",
+            httpContext,
+            ToFailureResult);
+    }
+
+    private static async Task<IResult> UpdateIssueCommentAsync(
+        Guid organizationId,
+        Guid issueId,
+        Guid commentId,
+        UpdateIssueCommentRequest request,
+        IIssueService issueService,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var result = await issueService.UpdateIssueCommentAsync(
+            organizationId,
+            issueId,
+            commentId,
+            request,
+            cancellationToken);
+        return EndpointResults.OkOrFailure(result, IssueFailure.None, httpContext, ToFailureResult);
+    }
+
+    private static async Task<IResult> DeleteIssueCommentAsync(
+        Guid organizationId,
+        Guid issueId,
+        Guid commentId,
+        IIssueService issueService,
+        CancellationToken cancellationToken)
+    {
+        var result = await issueService.DeleteIssueCommentAsync(organizationId, issueId, commentId, cancellationToken);
+        return EndpointResults.NoContentOrFailure(result, IssueFailure.None, ToFailureResult);
+    }
+
+    private static async Task<IResult> ListIssueActivityAsync(
+        Guid organizationId,
+        Guid issueId,
+        [AsParameters] PageRequest page,
+        IIssueService issueService,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var result = await issueService.ListIssueActivityAsync(organizationId, issueId, page, cancellationToken);
+        return EndpointResults.OkOrFailure(result, IssueFailure.None, httpContext, ToFailureResult);
+    }
+
     private static IResult ToFailureResult<T>(ServiceResult<T, IssueFailure> result)
     {
         return result.Failure switch
         {
             IssueFailure.Validation => EndpointResults.ValidationProblem(result.Errors),
             IssueFailure.Forbidden => EndpointResults.ForbiddenProblem(
-                "The current user does not have permission to modify this issue."),
+                "The current user does not have permission to modify this issue resource."),
             IssueFailure.NotFound => EndpointResults.NotFound(),
             IssueFailure.ProjectNotFound => EndpointResults.NotFoundProblem(
                 "Project not found.",

@@ -144,6 +144,143 @@ internal static class IssueQueries
         return row is null ? null : IssueMappings.ToIssueResponse(row);
     }
 
+    public static async Task<PagedResponse<IssueCommentResponse>?> ListCommentsAsync(
+        TaskOpsDbContext dbContext,
+        Guid organizationId,
+        Guid issueId,
+        PageRequest page,
+        CancellationToken cancellationToken)
+    {
+        if (!await IssueExistsAsync(dbContext, organizationId, issueId, cancellationToken))
+        {
+            return null;
+        }
+
+        var limit = page.SafeLimit;
+        var offset = page.SafeOffset;
+        var rows = await dbContext.IssueComments
+            .AsNoTracking()
+            .Where(comment =>
+                comment.OrganizationId == organizationId &&
+                comment.IssueId == issueId &&
+                comment.DeletedAt == null)
+            .OrderBy(comment => comment.CreatedAt)
+            .ThenBy(comment => comment.Id)
+            .Skip(offset)
+            .Take(limit + 1)
+            .Select(comment => new IssueCommentProjection(
+                comment.Id,
+                comment.OrganizationId,
+                comment.IssueId,
+                comment.Author.Id,
+                comment.Author.UserId,
+                comment.Author.User.DisplayName,
+                comment.Author.User.Email,
+                comment.Body,
+                comment.CreatedAt,
+                comment.UpdatedAt))
+            .ToListAsync(cancellationToken);
+
+        var items = rows
+            .Take(limit)
+            .Select(IssueMappings.ToCommentResponse)
+            .ToList();
+
+        return new PagedResponse<IssueCommentResponse>(
+            items,
+            offset,
+            limit,
+            rows.Count > limit);
+    }
+
+    public static async Task<IssueCommentResponse?> GetCommentAsync(
+        TaskOpsDbContext dbContext,
+        Guid organizationId,
+        Guid issueId,
+        Guid commentId,
+        CancellationToken cancellationToken)
+    {
+        var row = await dbContext.IssueComments
+            .AsNoTracking()
+            .Where(comment =>
+                comment.OrganizationId == organizationId &&
+                comment.IssueId == issueId &&
+                comment.Id == commentId &&
+                comment.DeletedAt == null)
+            .Select(comment => new IssueCommentProjection(
+                comment.Id,
+                comment.OrganizationId,
+                comment.IssueId,
+                comment.Author.Id,
+                comment.Author.UserId,
+                comment.Author.User.DisplayName,
+                comment.Author.User.Email,
+                comment.Body,
+                comment.CreatedAt,
+                comment.UpdatedAt))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return row is null ? null : IssueMappings.ToCommentResponse(row);
+    }
+
+    public static async Task<PagedResponse<IssueActivityResponse>?> ListActivityAsync(
+        TaskOpsDbContext dbContext,
+        Guid organizationId,
+        Guid issueId,
+        PageRequest page,
+        CancellationToken cancellationToken)
+    {
+        if (!await IssueExistsAsync(dbContext, organizationId, issueId, cancellationToken))
+        {
+            return null;
+        }
+
+        var limit = page.SafeLimit;
+        var offset = page.SafeOffset;
+        var rows = await dbContext.IssueActivities
+            .AsNoTracking()
+            .Where(activity => activity.OrganizationId == organizationId && activity.IssueId == issueId)
+            .OrderByDescending(activity => activity.CreatedAt)
+            .ThenByDescending(activity => activity.Id)
+            .Skip(offset)
+            .Take(limit + 1)
+            .Select(activity => new IssueActivityProjection(
+                activity.Id,
+                activity.OrganizationId,
+                activity.IssueId,
+                activity.Type,
+                activity.Actor == null ? null : activity.Actor.Id,
+                activity.Actor == null ? null : activity.Actor.UserId,
+                activity.Actor == null ? null : activity.Actor.User.DisplayName,
+                activity.Actor == null ? null : activity.Actor.User.Email,
+                activity.Field,
+                activity.OldValue,
+                activity.NewValue,
+                activity.CommentId,
+                activity.CreatedAt))
+            .ToListAsync(cancellationToken);
+
+        var items = rows
+            .Take(limit)
+            .Select(IssueMappings.ToActivityResponse)
+            .ToList();
+
+        return new PagedResponse<IssueActivityResponse>(
+            items,
+            offset,
+            limit,
+            rows.Count > limit);
+    }
+
+    private static async Task<bool> IssueExistsAsync(
+        TaskOpsDbContext dbContext,
+        Guid organizationId,
+        Guid issueId,
+        CancellationToken cancellationToken) =>
+        await dbContext.Issues
+            .AsNoTracking()
+            .AnyAsync(issue => issue.OrganizationId == organizationId && issue.Id == issueId, cancellationToken);
+
     private static DateTimeOffset ToUtcStart(DateOnly date) =>
         new(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
 

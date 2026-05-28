@@ -4,6 +4,7 @@ public static class IssueValidation
 {
     public const int MaxTitleLength = 240;
     public const int MaxDescriptionLength = 8000;
+    public const int MaxCommentBodyLength = 4000;
     public const int MaxSearchLength = 120;
     public const string StatusMessage = "Status must be one of: Todo, InProgress, InReview, Done.";
     public const string PriorityMessage = "Priority must be one of: Low, Medium, High, Critical.";
@@ -17,6 +18,12 @@ public static class IssueValidation
 
     public static bool IsValidDescription(string? description) =>
         description is null || description.Trim().Length <= MaxDescriptionLength;
+
+    public static bool IsValidCommentBody(string? body)
+    {
+        var trimmedBody = body?.Trim() ?? string.Empty;
+        return trimmedBody.Length is > 0 and <= MaxCommentBodyLength;
+    }
 
     public static bool IsValidSearch(string? search) =>
         NormalizeOptional(search) is not { } normalizedSearch || normalizedSearch.Length <= MaxSearchLength;

@@ -78,6 +78,8 @@ public static class DependencyInjection
         services.AddScoped<IValidator<UpdateIssueRequest>, UpdateIssueRequestValidator>();
         services.AddScoped<IValidator<ChangeIssueStatusRequest>, ChangeIssueStatusRequestValidator>();
         services.AddScoped<IValidator<ChangeIssuePriorityRequest>, ChangeIssuePriorityRequestValidator>();
+        services.AddScoped<IValidator<CreateIssueCommentRequest>, CreateIssueCommentRequestValidator>();
+        services.AddScoped<IValidator<UpdateIssueCommentRequest>, UpdateIssueCommentRequestValidator>();
 
         return services;
     }

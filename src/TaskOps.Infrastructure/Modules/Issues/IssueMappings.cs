@@ -38,6 +38,33 @@ internal static class IssueMappings
             row.CreatedAt,
             row.UpdatedAt);
 
+    public static IssueCommentResponse ToCommentResponse(IssueCommentProjection row) =>
+        new(
+            row.Id,
+            row.OrganizationId,
+            row.IssueId,
+            new IssueCommentAuthorResponse(
+                row.AuthorMemberId,
+                row.AuthorUserId,
+                row.AuthorDisplayName,
+                row.AuthorEmail),
+            row.Body,
+            row.CreatedAt,
+            row.UpdatedAt);
+
+    public static IssueActivityResponse ToActivityResponse(IssueActivityProjection row) =>
+        new(
+            row.Id,
+            row.OrganizationId,
+            row.IssueId,
+            row.Type.ToString(),
+            ToActivityActorResponse(row.ActorMemberId, row.ActorUserId, row.ActorDisplayName, row.ActorEmail),
+            row.Field,
+            row.OldValue,
+            row.NewValue,
+            row.CommentId,
+            row.CreatedAt);
+
     private static IssueAssigneeResponse? ToAssigneeResponse(
         Guid? assigneeMemberId,
         Guid? assigneeUserId,
@@ -50,6 +77,19 @@ internal static class IssueMappings
                 assigneeUserId.Value,
                 assigneeDisplayName,
                 assigneeEmail);
+
+    private static IssueActivityActorResponse? ToActivityActorResponse(
+        Guid? actorMemberId,
+        Guid? actorUserId,
+        string? actorDisplayName,
+        string? actorEmail) =>
+        actorMemberId is null || actorUserId is null || actorDisplayName is null || actorEmail is null
+            ? null
+            : new IssueActivityActorResponse(
+                actorMemberId.Value,
+                actorUserId.Value,
+                actorDisplayName,
+                actorEmail);
 
     private static string FormatIssueKey(string projectKey, int number) => $"{projectKey}-{number}";
 }
@@ -70,6 +110,33 @@ internal sealed record IssueListProjection(
     DateOnly? DueDate,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
+
+internal sealed record IssueCommentProjection(
+    Guid Id,
+    Guid OrganizationId,
+    Guid IssueId,
+    Guid AuthorMemberId,
+    Guid AuthorUserId,
+    string AuthorDisplayName,
+    string AuthorEmail,
+    string Body,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+internal sealed record IssueActivityProjection(
+    Guid Id,
+    Guid OrganizationId,
+    Guid IssueId,
+    IssueActivityType Type,
+    Guid? ActorMemberId,
+    Guid? ActorUserId,
+    string? ActorDisplayName,
+    string? ActorEmail,
+    string? Field,
+    string? OldValue,
+    string? NewValue,
+    Guid? CommentId,
+    DateTimeOffset CreatedAt);
 
 internal sealed record IssueProjection(
     Guid Id,

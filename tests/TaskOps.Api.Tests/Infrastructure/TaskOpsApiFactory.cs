@@ -54,6 +54,8 @@ public sealed class TaskOpsApiFactory : WebApplicationFactory<Program>, IAsyncLi
 
         await dbContext.Database.ExecuteSqlRawAsync("""
             TRUNCATE TABLE
+                "IssueActivities",
+                "IssueComments",
                 "Issues",
                 "Projects",
                 "OrganizationMembers",
