@@ -23,6 +23,10 @@ public sealed class TaskOpsDbContext(
 
     public DbSet<Issue> Issues => Set<Issue>();
 
+    public DbSet<IssueComment> IssueComments => Set<IssueComment>();
+
+    public DbSet<IssueActivity> IssueActivities => Set<IssueActivity>();
+
     public override int SaveChanges()
     {
         ApplyAuditFields();

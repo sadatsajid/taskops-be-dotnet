@@ -31,4 +31,8 @@ public sealed class Issue : AuditableEntity
     public OrganizationMember? Assignee { get; set; }
 
     public DateOnly? DueDate { get; set; }
+
+    public ICollection<IssueComment> Comments { get; set; } = [];
+
+    public ICollection<IssueActivity> Activities { get; set; } = [];
 }

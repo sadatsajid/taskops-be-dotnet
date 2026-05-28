@@ -48,4 +48,35 @@ public interface IIssueService
         Guid issueId,
         SetIssueDueDateRequest request,
         CancellationToken cancellationToken);
+
+    Task<ServiceResult<PagedResponse<IssueCommentResponse>, IssueFailure>> ListIssueCommentsAsync(
+        Guid organizationId,
+        Guid issueId,
+        PageRequest page,
+        CancellationToken cancellationToken);
+
+    Task<ServiceResult<IssueCommentResponse, IssueFailure>> CreateIssueCommentAsync(
+        Guid organizationId,
+        Guid issueId,
+        CreateIssueCommentRequest request,
+        CancellationToken cancellationToken);
+
+    Task<ServiceResult<IssueCommentResponse, IssueFailure>> UpdateIssueCommentAsync(
+        Guid organizationId,
+        Guid issueId,
+        Guid commentId,
+        UpdateIssueCommentRequest request,
+        CancellationToken cancellationToken);
+
+    Task<ServiceResult<object, IssueFailure>> DeleteIssueCommentAsync(
+        Guid organizationId,
+        Guid issueId,
+        Guid commentId,
+        CancellationToken cancellationToken);
+
+    Task<ServiceResult<PagedResponse<IssueActivityResponse>, IssueFailure>> ListIssueActivityAsync(
+        Guid organizationId,
+        Guid issueId,
+        PageRequest page,
+        CancellationToken cancellationToken);
 }

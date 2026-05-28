@@ -22,6 +22,10 @@ public sealed record ChangeIssuePriorityRequest(string? Priority);
 
 public sealed record SetIssueDueDateRequest(DateOnly? DueDate);
 
+public sealed record CreateIssueCommentRequest(string? Body);
+
+public sealed record UpdateIssueCommentRequest(string? Body);
+
 public sealed class IssueListQuery
 {
     public int Offset { get; init; } = 0;
@@ -90,3 +94,36 @@ public sealed record IssueResponse(
 
     public static string FormatPriority(IssuePriority priority) => priority.ToString();
 }
+
+public sealed record IssueCommentAuthorResponse(
+    Guid MemberId,
+    Guid UserId,
+    string DisplayName,
+    string Email);
+
+public sealed record IssueCommentResponse(
+    Guid Id,
+    Guid OrganizationId,
+    Guid IssueId,
+    IssueCommentAuthorResponse Author,
+    string Body,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+public sealed record IssueActivityActorResponse(
+    Guid MemberId,
+    Guid UserId,
+    string DisplayName,
+    string Email);
+
+public sealed record IssueActivityResponse(
+    Guid Id,
+    Guid OrganizationId,
+    Guid IssueId,
+    string Type,
+    IssueActivityActorResponse? Actor,
+    string? Field,
+    string? OldValue,
+    string? NewValue,
+    Guid? CommentId,
+    DateTimeOffset CreatedAt);

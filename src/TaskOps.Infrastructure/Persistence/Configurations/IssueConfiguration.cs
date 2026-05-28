@@ -15,6 +15,7 @@ public sealed class IssueConfiguration : IEntityTypeConfiguration<Issue>
         entity.Property(issue => issue.Status).HasConversion<string>().HasMaxLength(40).IsRequired();
         entity.Property(issue => issue.Priority).HasConversion<string>().HasMaxLength(40).IsRequired();
 
+        entity.HasAlternateKey(issue => new { issue.Id, issue.OrganizationId });
         entity.HasIndex(issue => new { issue.OrganizationId, issue.ProjectId, issue.Number }).IsUnique();
         entity.HasIndex(issue => new { issue.OrganizationId, issue.Status });
         entity.HasIndex(issue => new { issue.OrganizationId, issue.Priority });
